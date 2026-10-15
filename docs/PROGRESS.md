@@ -904,3 +904,9 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **实际验证：**`pnpm check template-engine api tex-worker` 通过；显式运行 policy.test.ts、contest.test.ts、statement-settings.test.ts，共 11 项通过，默认快查不扩展。原独立 Linux TeX 沙箱实际编译两份检查材料：原库已发布「CWNU 挑战赛比赛题面 v2」配用户第一张截图的两组数据，得到 1 页 PDF；简洁模板比赛题册含参考图两组短样例、宽窄混排/空输出/字面 TeX/空行、7 组连续样例跨页，得到 7 页 PDF。均 Accepted，无 Overfull hbox/vbox；Poppler 渲染并逐页目视确认表头、边框、横线、居中、样例顺序、跨页及末尾提示。文本提取确认截图数据的表头各一次、跨页 7 组输出各出现一次。首次编译暴露 longtable 在 documentclass 前加载的计数器冲突，已改为 class/after 钩子加载，两份最终 PDF 通过。证据与小型复现保存在 Git 忽略的 `.local/sample-table-merge/`，沙箱上传/输出临时文件已清理，未创建业务构建记录。
 
 **原环境与收尾：**开始确认主目录原服务树（pnpm 根 56784、Vite 85008、API 57800）。再次确认活动 Build/TestRun 为 0、5180/3100 归属正确后，仅重启主目录同一 pnpm dev；仍用原库、Redis、私有存储、已发布模板及原沙箱，无新端口、实例、依赖或迁移。收尾根 92148、Vite 39592、API 12616、两个 Worker 63312/91356，归属核对通过、没有额外 Worker；首页 200、API 健康 ok、stderr 为空。文稿/修订及全部模板版本指纹前后一致，活动任务仍为 0，见 before/after、services-verified、final-check.json。未执行浏览器按钮点击、真实业务队列构建、Judge、全量/E2E、云端部署或公网发布；用户在原站重新「构建 PDF」即可采用新排版。本轮无阻塞，差异检查后本地 Git 提交，不 push。
+
+## 新建题目默认题面补充提示（2026-10-15）
+
+**实现：**按用户给定文本，在新建题目 API 的初始题面末尾追加空行、`\Note` 和“在这里编写提示。”；初稿依次为题目描述、输入格式、输出格式和提示。初次内容修订及其哈希沿用原创建流程。既有文稿、管理员发布模板、两种题解和新增翻译语言的空白初稿规则未改。
+
+**实际验证与环境：**`pnpm check api` 通过，检查网页两处创建入口均使用该 API。确认原 5180/3100 归属和零活动任务后重启主目录同一 pnpm dev；仍用原库、存储和模板，无新端口/实例或迁移。收尾根 97028、Vite 88884、API 60012、两个 Worker 59896/91088；首页 200、健康 ok、无额外 Worker、stderr 为空，活动 Build/TestRun 为 0。服务核对证据 `.local/statement-draft-default/`，本轮启动日志沿用 `.local/sample-table-merge/dev.out.log` / `dev.err.log`。没有创建测试题、改写业务文稿或执行真实新建请求、浏览器操作、TeX/Judge、全量/E2E、部署；本轮仅默认文字变更，无阻塞，差异检查后本地提交，不 push。

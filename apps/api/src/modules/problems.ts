@@ -17,7 +17,7 @@ export async function problemRoutes(app: Api) {
       const p = await tx.problem.create({ data: { title: req.body.title, members: { create: { userId: req.user.id, role: 'OWNER' } } } });
       for (const kind of kinds) {
         const metadata = { title: req.body.title, author: req.user.name };
-        const body = kind === 'EDITORIAL_BEAMER' ? '\\begin{frame}{思路}\n\\begin{itemize}\n\\item 在这里编写讲解内容。\n\\end{itemize}\n\\end{frame}' : kind === 'STATEMENT' ? '在这里编写题目描述。\n\n\\InputFile\n在这里编写输入格式。\n\n\\OutputFile\n在这里编写输出格式。\n' : '\\section*{算法思路}\n在这里编写书面题解。\n\n\\section*{正确性证明}\n\n\\section*{复杂度分析}\n';
+        const body = kind === 'EDITORIAL_BEAMER' ? '\\begin{frame}{思路}\n\\begin{itemize}\n\\item 在这里编写讲解内容。\n\\end{itemize}\n\\end{frame}' : kind === 'STATEMENT' ? '在这里编写题目描述。\n\n\\InputFile\n在这里编写输入格式。\n\n\\OutputFile\n在这里编写输出格式。\n\n\\Note\n在这里编写提示。\n' : '\\section*{算法思路}\n在这里编写书面题解。\n\n\\section*{正确性证明}\n\n\\section*{复杂度分析}\n';
         const candidates = await tx.templateVersion.findMany({ where: { state: 'PUBLISHED', template: { kind } }, select: { id: true, files: true }, orderBy: { publishedAt: 'desc' } });
         const template = candidates.find(v => templateLanguages(v.files as TemplateFiles).includes(req.body.language));
         const doc = await tx.document.create({ data: { problemId: p.id, language: req.body.language, kind, templateVersionId: template?.id } });
