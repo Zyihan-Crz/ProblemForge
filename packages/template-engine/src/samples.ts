@@ -1,6 +1,7 @@
 // Trusted preamble for platform-bound samples. Measure the literal files with
 // the template's verbatim font and column widths; never parse sample bytes as TeX.
 export const SAMPLE_LAYOUT_PREAMBLE = String.raw`\RequirePackage{fvextra}
+\AddToHook{class/after}{\RequirePackage{longtable}}
 \makeatletter
 \newif\ifpfsamplewide
 \newdimen\pf@samplelimit
@@ -22,8 +23,32 @@ export const SAMPLE_LAYOUT_PREAMBLE = String.raw`\RequirePackage{fvextra}
   \VerbatimInput[breaklines=true,breakanywhere=true,breakautoindent=false,breakindent=0pt,breaksymbolleft={},breaksymbolright={},breakanywheresymbolpre={},breakanywheresymbolpost={},commandchars=none,commentchar=none,listparameters={\topsep=0pt\partopsep=0pt}]{#1}%
   \medskip\end{minipage}%
 }
-\newcommand{\pfsamplepair}[2]{%
-  \par\begingroup%
+\newcommand{\pf@samplerow}[2]{%
+  \begin{minipage}[t]{\exmpwidinf}%
+  \rightskip=0pt plus 1fill\relax\verbatiminput{#1}%
+  \medskip\end{minipage}&%
+  \begin{minipage}[t]{\exmpwidouf}%
+  \rightskip=0pt plus 1fill\relax\verbatiminput{#2}%
+  \medskip\end{minipage}\\\hline%
+}
+\newcommand{\pf@flushsamples}{%
+  \ifx\pf@samplerows\@empty\else%
+    \par\begingroup\ttfamily\frenchspacing%
+    \LTleft=\fill\LTright=\fill\LTpre=0pt\LTpost=0pt%
+    % One header per table, repeated only when the table continues on a new page.
+    \begin{longtable}{|l|l|}%
+    \hline%
+    \multicolumn{1}{|c|}{\bfseries\texttt{\InputFileName}}&%
+    \multicolumn{1}{|c|}{\bfseries\texttt{\OutputFileName}}\\\hline%
+    \endhead%
+    \pf@samplerows%
+    \end{longtable}%
+    \endgroup\par\medskip%
+    \let\pf@samplerows\@empty%
+  \fi%
+}
+\newenvironment{pfsamples}{%
+  \par%
   % Template geometry may change after olymp initializes its sample widths.
   \pf@samplelimit=\dimexpr\linewidth-2\tabcolsep-2\arrayrulewidth\relax%
   \ifdim\exmpwidewid>\pf@samplelimit\exmpwidewid=\pf@samplelimit\fi%
@@ -32,12 +57,18 @@ export const SAMPLE_LAYOUT_PREAMBLE = String.raw`\RequirePackage{fvextra}
     \ifdim\exmpwidinf>\pf@samplelimit\exmpwidinf=\pf@samplelimit\fi%
     \ifdim\exmpwidouf>\pf@samplelimit\exmpwidouf=\pf@samplelimit\fi%
   \fi%
+  \centering%
+  \let\pf@samplerows\@empty%
+}{%
+  \pf@flushsamples\par%
+}
+\newcommand{\pfsamplepair}[2]{%
   \global\pfsamplewidefalse%
   \pf@measuresample{#1}{\exmpwidinf}%
   \pf@measuresample{#2}{\exmpwidouf}%
-  \centering\noindent%
   \ifpfsamplewide%
-    \ttfamily\frenchspacing%
+    \pf@flushsamples%
+    \par\noindent\begingroup\ttfamily\frenchspacing%
     \begin{tabular}{|c|}%
     \hline%
     \multicolumn{1}{|c|}{\bfseries\texttt{\InputFileName}}\\\hline%
@@ -45,16 +76,15 @@ export const SAMPLE_LAYOUT_PREAMBLE = String.raw`\RequirePackage{fvextra}
     \multicolumn{1}{|c|}{\bfseries\texttt{\OutputFileName}}\\\hline%
     \pf@widesampleblock{#2}\\\hline%
     \end{tabular}%
+    \par\endgroup\medskip%
   \else%
-    \begin{example}%
-    \exmpfile{#1}{#2}%
-    \end{example}%
+    % Collect consecutive narrow pairs before opening the shared table.
+    \edef\pf@samplerows{\unexpanded\expandafter{\pf@samplerows}\noexpand\pf@samplerow{#1}{#2}}%
   \fi%
-  \par\endgroup\medskip%
 }
 \makeatother
 `;
 
 export function renderSamplePairs(samples: { inputPath: string; answerPath: string }[]) {
-  return '\\Examples\n' + samples.map(s => `\\pfsamplepair{${s.inputPath}}{${s.answerPath}}`).join('\n') + '\n';
+  return '\\Examples\n\\begin{pfsamples}\n' + samples.map(s => `\\pfsamplepair{${s.inputPath}}{${s.answerPath}}`).join('\n') + '\n\\end{pfsamples}\n';
 }

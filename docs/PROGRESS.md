@@ -896,3 +896,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **依赖与生产打包：**初查发现本机安装的 Fastify 5.6.2、yaml 2.8.1、Prisma 6.19.0 仍落后于上轮已提交锁文件；执行 `pnpm install --frozen-lockfile` 对齐既有版本，并 `pnpm db:generate` 生成 6.19.3 客户端，没有修改 manifest/lockfile 或运行迁移。以上定向单元、类型、真实 API 与样包解析均在依赖对齐后重新通过。`pnpm build:web` 成功，保留现有 Monaco 大块提示；生产页面包含新导出入口。
 
 **环境与未验证：**本轮在主目录 D:\project\ProblemForge 工作，开始与收尾均未发现 5180/3100 应用监听或主目录 dev/Worker 服务；不能沿用旧交接 PID 认为页面仍在运行。原 PostgreSQL / Redis / 两个 Linux 沙箱容器及 15432/16379/15050/15051 回环映射存在，没有启动新实例/端口、切换数据库/模板/私有存储或重启服务。记录 listeners.json、processes.json。没有本轮浏览器点击实测、真实 NovaJudge 上传/判题、作者程序/TeX、全量/E2E 或云端部署；官方导入内存夹具不替代目标站验收。用户指南、题包协议与 PLAN 已同步；功能无阻塞，完成本地提交后按用户明确授权推送原 GitHub master，云服务器由用户拉取升级。
+
+## PDF 多个样例合为同一张表格（2026-10-15）
+
+**用户反馈与实现：**用户给出两个截图，要求多组输入/输出共用表头并用横线分隔。原因是 `pfsamplepair` 为每组短样例各自打开 example 表格。现在先收集连续短样例，再输出一张居中的双列表格，每组占一行；采用沙箱已有 longtable 支持行间换页，续页重复表头。过宽样例仍按实际字体测量后上下排列，前后短样例分别合表，样例次序、字节、空输出和特殊字符保持原义。单题、单题册及比赛共用 `pf-samples-6`，版本进入现有构建快照与缓存哈希；新构建不会命中旧排版，历史 PDF 与已发布模板记录不改写。TEMPLATES、USER_GUIDE 和 PLAN 同步。
+
+**实际验证：**`pnpm check template-engine api tex-worker` 通过；显式运行 policy.test.ts、contest.test.ts、statement-settings.test.ts，共 11 项通过，默认快查不扩展。原独立 Linux TeX 沙箱实际编译两份检查材料：原库已发布「CWNU 挑战赛比赛题面 v2」配用户第一张截图的两组数据，得到 1 页 PDF；简洁模板比赛题册含参考图两组短样例、宽窄混排/空输出/字面 TeX/空行、7 组连续样例跨页，得到 7 页 PDF。均 Accepted，无 Overfull hbox/vbox；Poppler 渲染并逐页目视确认表头、边框、横线、居中、样例顺序、跨页及末尾提示。文本提取确认截图数据的表头各一次、跨页 7 组输出各出现一次。首次编译暴露 longtable 在 documentclass 前加载的计数器冲突，已改为 class/after 钩子加载，两份最终 PDF 通过。证据与小型复现保存在 Git 忽略的 `.local/sample-table-merge/`，沙箱上传/输出临时文件已清理，未创建业务构建记录。
+
+**原环境与收尾：**开始确认主目录原服务树（pnpm 根 56784、Vite 85008、API 57800）。再次确认活动 Build/TestRun 为 0、5180/3100 归属正确后，仅重启主目录同一 pnpm dev；仍用原库、Redis、私有存储、已发布模板及原沙箱，无新端口、实例、依赖或迁移。收尾根 92148、Vite 39592、API 12616、两个 Worker 63312/91356，归属核对通过、没有额外 Worker；首页 200、API 健康 ok、stderr 为空。文稿/修订及全部模板版本指纹前后一致，活动任务仍为 0，见 before/after、services-verified、final-check.json。未执行浏览器按钮点击、真实业务队列构建、Judge、全量/E2E、云端部署或公网发布；用户在原站重新「构建 PDF」即可采用新排版。本轮无阻塞，差异检查后本地 Git 提交，不 push。

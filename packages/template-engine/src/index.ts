@@ -8,7 +8,7 @@ import { SAMPLE_LAYOUT_PREAMBLE, renderSamplePairs } from './samples.ts';
 
 export const POLICY_VERSION = 'pf-content-5';
 export const TEX_PROFILE = 'xelatex-2022-bookworm-v1';
-export const SAMPLE_RENDERER_VERSION = 'pf-samples-5';
+export const SAMPLE_RENDERER_VERSION = 'pf-samples-6';
 export type TemplateFiles = Record<string, string>;
 export async function loadTemplateDirectory(directory: string, prefix = ''): Promise<TemplateFiles> {
   const files: TemplateFiles = {};
