@@ -302,6 +302,8 @@ bash /opt/problemforge/current/deploy.sh status
 
 用户已确认沿用原 Ubuntu / PM2 / `/root/.hydro/Caddyfile` 服务器和 `problems.cwnupaa.com`。以下是升级流程：本机上传已提交代码 → 服务器核对原实例 → 拉取并校验版本 → 备份及部署 → 验收。原账号、密钥、题库、已发布模板和存储沿用；本机开发数据不会随 Git 上传。此次四项修复没有新增数据库迁移，部署仍按标准流程检查迁移状态。安排一次维护窗口，等待排队/执行中的构建与判题结束，期间避免提交新任务。
 
+**拉取和检查成功不代表网站已更新。** `/root/ProblemForge` 是源码目录，线上应用由 `/opt/problemforge/current` 指向的固定发布目录运行。A—C 和上文 403 修复命令仅更新源码、检查环境；还必须执行 D 的打包及部署，等待明确显示「部署完成」，再用 E 核对已部署提交。重新打开网页或只运行 status 不会切换应用版本。
+
 ### A. 本机 Windows：上传最新提交
 
 以下仅在 `D:\project\ProblemForge` 的 PowerShell 中由操作者执行。工作区必须干净；不使用强制推送。2026-10-15 准备指引时只读核对远端 master 为 e8db0e7，四项修复截至 3bee810 尚未推送；这里是交付前置步骤，不代表已经上传。
@@ -371,10 +373,17 @@ set -euo pipefail
 umask 077
 . /opt/problemforge-tools/env.sh
 cd /root/ProblemForge
+test "$(id -u)" = 0
+test -f /opt/problemforge/.problemforge-managed
+test -L /opt/problemforge/current
 test ! -e /opt/problemforge/shared/pending-deploy.json
 test ! -e /opt/problemforge/.deploy.lock
 test -z "$(git status --porcelain)"
-git merge-base --is-ancestor 3bee810c983668c1ed1c4c379a65517a4613a814 HEAD
+git merge-base --is-ancestor 5142c4e6bd9e92bf672d84527076c7bba0806ca1 HEAD
+
+ss -lntp '( sport = :80 or sport = :443 or sport = :2019 or sport = :5181 or sport = :25432 or sport = :26379 or sport = :25050 or sport = :25051 )'
+node scripts/cloud-deploy.mjs check-caddy
+node scripts/cloud-deploy.mjs status
 
 pf_config_backup="/opt/problemforge/shared/backups/config-before-$(date +%Y%m%d-%H%M%S)"
 mkdir -m 700 "$pf_config_backup"
@@ -395,7 +404,7 @@ bash "$pf_release/deploy.sh"
 )
 ```
 
-升级不再传 secrets 或 settings 文件，安装器沿用 `/opt/problemforge/shared` 的实际配置。不要从源码根目录直接执行安装，因为那里没有发布清单。
+升级不再传 secrets 或 settings 文件，安装器沿用 `/opt/problemforge/shared` 的实际配置。提交检查要求同时包含四项功能修复和 Caddy Origin 修复。先核对监听归属；安装器在准备应用前也会自动检查本站端口，冲突即停止。不要从源码根目录直接执行安装，因为那里没有发布清单。
 
 脚本先准备新版本及沙箱镜像，再检查无活动任务、停止本站 API/Worker，自动完成数据库与私有文件的一致备份，输出「一致备份已保存」路径；然后检查基础设施、迁移状态、启动新版、切换 current、更新本站 Caddy 块并验证 HTTPS。备份目录包含 database.dump、storage.tar、state.json、manifest.json，与上面的配置备份共同保留。前端构建及沙箱阶段可能较慢，直到明确显示「部署完成」才继续。
 

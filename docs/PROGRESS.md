@@ -960,3 +960,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **实际验证：**Node 语法及 15 项部署定向检查通过。使用已有本地镜像进行无网络、无监听的 Linux 构建验证：真实 Caddy 2.10.2 适配 enforce_origin 配置，实际执行本项目 check-caddy CLI，管理接口由 fetch 替身模拟。localhost、IPv4 和 IPv6 三种地址均验证请求头正确时匹配成功（含相对配置路径），持续 403 与真实配置字段不一致仍拒绝，Caddyfile 未修改且不输出配置值。证据 `.local/caddy-pm2/caddy-origin-evidence/caddy-origin-check.json`，liveAdminMocked=true、listenerStarted=false；不将其写为真实服务器管理接口验收。文档 20 个 Bash 块语法及 1 个 PowerShell 块语法树解析通过，服务器命令均未执行。
 
 **交付与边界：**DEPLOY_HYDRO_CADDY 增补 403 恢复步骤和旧 current 的检查顺序：用户本机推送修复后，服务器核对端口、托管标记、锁/pending 和干净分支，再快进拉取；用拉取后的源码执行 check-caddy / status，通过后继续备份打包升级。源码 status 支持检查原实例，无需修改不可变旧包。原主目录 5180/3100 仍为 Vite 32304 / API 88612，命令行归属确认，无重启、端口变更、业务数据修改或 TeX/Judge。未访问云主机、修改 Hydro、推送或部署公网；目标主机的拒绝原因、检查和升级结果待用户执行。PLAN 已同步，差异检查通过后本地提交。
+
+## 拉取检查后网站仍为旧版：补齐实际部署步骤（2026-10-15）
+
+**用户确认与说明：**用户执行上一轮命令后说“没有变化”，进一步明确指网站功能还是旧样子，而非终端继续报 403。上一组命令只拉取源码并运行 check-caddy/status，确实没有调用发布包安装或切换 current；不能将其当作网站更新完成。用户未提供新的终端日志，因此不单凭“运行完”宣称云端检查已全部通过。
+
+**交付：**部署指南明确区分 `/root/ProblemForge` 源码与 `/opt/problemforge/current` 线上固定版本。补强 D 的托管标记、root、current、锁/pending、包含 5142c4e 修复的提交检查，执行前读取监听归属并用新源码检查 Caddy 和原站健康。向用户直接交付配置备份、固定 Git SHA 打包、执行包内 deploy.sh、部署后 status/last-deploy 提交比对及浏览器验收命令；无需为了本轮文档再推送或拉取。题面变化需重新构建 PDF，历史 PDF 不变。
+
+**实际验证与边界：**沿用并逐行核对现有 package-cloud / deploy.sh / cloud-deploy 的打包、备份、切换和健康检查行为；文档及本轮组合命令仅进行 Bash 语法检查，没有连接服务器或执行部署。未修改应用代码、依赖、数据库或开发服务，不重跑应用测试或 TeX/Judge。目标主机实际部署、版本核对与网页结果仍待用户执行；本轮只本地提交指引和交接，不 push。
