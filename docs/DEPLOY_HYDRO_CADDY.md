@@ -2,7 +2,7 @@
 
 以下命令在 Ubuntu 22.04/24.04 **x86_64 云服务器的 SSH 终端**执行，使用 root 账户，不是在本机 PowerShell 执行。每个代码块单独复制；命令中的 `set -e` 会在出错时停止，可能退出当前 SSH 终端，重新登录后从失败步骤继续。域名 `problems.cwnupaa.com` 应解析到该服务器，80/443 由现有 Caddy 接收。这里部署新站，原 Windows 题库需另行迁移。
 
-已有站点升级时直接使用文末「更新已有站点」流程，不重复安装工具或初始化私有配置。
+已有站点只需在服务器源码目录拉取代码，然后运行 `bash deploy.sh update`，见文末「更新已有站点」。以下编号步骤用于首次安装。
 
 ## 1. 检查并备份现有 Caddyfile
 
@@ -247,7 +247,7 @@ bash /opt/problemforge/current/deploy.sh status
 )
 ```
 
-模块检查应打印 `caddy.listeners.layer4`，选中的真实路径应与 `/usr/local/bin/caddy-l4` 的真实路径一致，随后 Caddy 配置匹配和原站状态检查应通过。发现专用入口已有不同目标时命令会停止，不覆盖。路径补充保存在 env.sh，括号子 shell 退出或重新登录后，原升级步骤中的 `. /opt/problemforge-tools/env.sh` 仍会选择正确程序。完成后继续下文 C（拉取代码）、D（备份部署）、E（验收）；任一步报错先处理该错误。此处成功仅表示原站预检通过，不表示新版应用已部署。
+模块检查应打印 `caddy.listeners.layer4`，选中的真实路径应与 `/usr/local/bin/caddy-l4` 的真实路径一致，随后 Caddy 配置匹配和原站状态检查应通过。发现专用入口已有不同目标时命令会停止，不覆盖。路径补充保存在 env.sh，括号子 shell 退出或重新登录后，原升级步骤中的 `. /opt/problemforge-tools/env.sh` 仍会选择正确程序。完成后使用文末的更新命令；任一步报错先处理该错误。此处成功仅表示原站预检通过，不表示新版应用已部署。
 
 ### Caddy 管理接口返回 HTTP 403
 
@@ -356,163 +356,35 @@ bash /opt/problemforge/current/deploy.sh status
 
 打开 `https://problems.cwnupaa.com/login?mode=admin`，使用文件中的邮箱、随机密码登录；普通成员使用协会账号。密码只在自己的终端查看即可。
 
-以后升级重复第 4 步的拉取代码和第 5 步。若上一次数据库迁移未完成，先用原版本重试，不能先切换到新提交。查看本项目日志可以运行 `tail -n 80 /opt/problemforge/shared/logs/api.err.log`；不要提供包含私有 JSON 或管理员密码的终端内容。
+以后升级使用文末的 `bash deploy.sh update`。存在未完成迁移时，该命令先完成原版本，成功后再执行同一命令更新源码提交。查看本项目日志可以运行 `tail -n 80 /opt/problemforge/shared/logs/api.err.log`；不要提供包含私有 JSON 或管理员密码的终端内容。
 
 实际验证范围：部署定向检查现为 14 项，通过；Linux Caddy 2.10.2 实际复现绝对/相对配置路径导致的 hide 差异，并验证选择相对调用后精确匹配、真实配置差异仍拒绝。只读命令使用模拟的管理接口响应通过，不监听端口。此前已完成自定义目录、相对 import、原站点保留及 PM2 启动/重载夹具。没有登录用户云服务器或执行真实 Caddy 重载、Ubuntu 安装和业务任务。Node 归档仅核对官方校验清单，未在本机执行上述服务器安装命令。
 
-## 更新已有站点（2026-10-15 修复交付）
+## 更新已有站点
 
-用户已确认沿用原 Ubuntu / PM2 / `/root/.hydro/Caddyfile` 服务器和 `problems.cwnupaa.com`。以下是升级流程：本机上传已提交代码 → 服务器核对原实例 → 拉取并校验版本 → 备份及部署 → 验收。原账号、密钥、题库、已发布模板和存储沿用；本机开发数据不会随 Git 上传。此次四项修复没有新增数据库迁移，部署仍按标准流程检查迁移状态。安排一次维护窗口，等待排队/执行中的构建与判题结束，期间避免提交新任务。
+继续使用原 Ubuntu / PM2 / Caddyfile、域名和题库。代码先由开发者提交并推送，服务器拉取后运行统一更新入口即可；不重复安装工具或填写密钥。安排短暂维护窗口，先等待判题、构建任务完成。
 
-**拉取和检查成功不代表网站已更新。** `/root/ProblemForge` 是源码目录，线上应用由 `/opt/problemforge/current` 指向的固定发布目录运行。A—C 和上文 403 修复命令仅更新源码、检查环境；还必须执行 D 的打包及部署，等待明确显示「部署完成」，再用 E 核对已部署提交。重新打开网页或只运行 status 不会切换应用版本。
-
-### A. 本机 Windows：上传最新提交
-
-以下仅在 `D:\project\ProblemForge` 的 PowerShell 中由操作者执行。工作区必须干净；不使用强制推送。2026-10-15 准备指引时只读核对远端 master 为 e8db0e7，四项修复截至 3bee810 尚未推送；这里是交付前置步骤，不代表已经上传。
+尚未推送的本机提交，由操作者在 Windows PowerShell 执行：
 
 ```powershell
 Set-Location 'D:\project\ProblemForge'
-$pf_changes = git status --porcelain
-if ($LASTEXITCODE -ne 0 -or $pf_changes) { throw '请先处理工作区改动，再推送已确认的提交。' }
 git push origin master
-if ($LASTEXITCODE -ne 0) { throw '推送失败，先处理报错，不继续服务器升级。' }
-git rev-parse HEAD
-git ls-remote origin refs/heads/master
 ```
 
-末尾两行的完整提交哈希应相同。若推送被拒绝，保留报错，不执行 force 或 reset。
-
-### B. 云服务器 root：核对原站点
-
-从本步起均在原云服务器 SSH 终端执行。每个代码块独立运行；括号内遇错会停止该块，不关闭整个 SSH。任何步骤报错均先处理，不继续后续步骤。
+然后在原服务器的 root SSH 终端执行：
 
 ```bash
-(
-set -euo pipefail
-. /opt/problemforge-tools/env.sh
-test "$(id -u)" = 0
-test -f /opt/problemforge/.problemforge-managed
-test -L /opt/problemforge/current
-readlink -f /opt/problemforge/current
-cat /opt/problemforge/shared/settings.json
-ss -lntp '( sport = :80 or sport = :443 or sport = :5181 or sport = :25432 or sport = :26379 or sport = :25050 or sport = :25051 )'
-docker ps -a --filter label=com.docker.compose.project=problemforge-cloud --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-if [ -e /opt/problemforge/shared/pending-deploy.json ] || [ -e /opt/problemforge/.deploy.lock ]; then
-  printf '%s\n' '存在未完成部署或维护锁，先处理原任务，不继续本次升级。'
-  exit 1
-fi
-bash /opt/problemforge/current/deploy.sh status
-)
+cd /root/ProblemForge && git pull --ff-only origin master && bash deploy.sh update
 ```
 
-核对 settings 的域名、Caddyfile 和端口仍是原配置，80/443 为原 Caddy，其余列出的回环端口为本站托管资源。`status` 应确认本机健康、两 API / 两类 Worker 以及域名 HTTPS 正常。若归属异常，停止，不换端口或停其他项目；安装器正式部署前也会再次自动核对。
+`update` 自动载入已配置的 `/opt/problemforge-tools/env.sh`，使用原 caddy-l4 和本站 Node / pnpm / PM2。它先核对配置、Caddy 与本站端口归属，要求源码干净，按当前 Git 提交生成并校验不可变发布包，再准备依赖和前端。遇到其他服务占用端口会停止，不换端口或停止占用服务。
 
-如果旧部署器在 Caddy 管理接口处返回 HTTP 403，先完成上文对应小节的源码更新和检查，再进入 D；不要求旧 `current` 在修复安装前通过同一请求检查。
+沙箱 Dockerfile、COPY 输入和 .dockerignore 未变时，核对原站容器归属、运行状态及实际镜像后复用；改变的沙箱才构建。每类镜像准备完成立即记录其 ID，失败后重试可复用已完成部分。这次修正 Python 主包和依赖的版本锁定，因此 Judge 需要重建一次；已在本机实际构建并核对包版本通过。TeX 在构建输入未变时复用。
 
-### C. 云服务器：拉取并确认包含修复
+准备成功后，脚本自动静止本站写入并备份数据库、私有文件和服务器配置，再检查迁移、启动新版、切换 current，最后验证本机和 HTTPS。备份在 `/opt/problemforge/shared/backups/<时间>/`，含 database.dump、storage.tar、state.json、configuration/ 和 SHA-256 清单；configuration 包含环境文件、PM2 配置、Caddyfile 和原版本路径，目录仅 root 可访问。无需手动复制配置或计算发布目录。
 
-```bash
-(
-set -euo pipefail
-. /opt/problemforge-tools/env.sh
-cd /root/ProblemForge
-test "$(git branch --show-current)" = master
-test -z "$(git status --porcelain)"
-git pull --ff-only origin master
-git merge-base --is-ancestor 3bee810c983668c1ed1c4c379a65517a4613a814 HEAD
-git log -1 --oneline
-node scripts/cloud-deploy.mjs check-caddy
-)
-```
+成功会显示「部署完成：git-<提交>，本机及 HTTPS 健康检查通过」。相同提交再次运行只检查当前健康，不重复部署。打开网站强制刷新，确认归档筛选、创建者列、新建题面模板；重新构建双样例 PDF，确认合表和题头对齐，历史 PDF 不会被原地改写。
 
-祖先检查通过说明包含本轮四项修复，允许后续文档提交存在。`check-caddy` 从服务器保存的设置读取实际 Caddyfile；应显示文件与运行配置匹配。若源码有本地改动，先处理，不覆盖或清理。
+若失败，保留报错；修复原因后仍执行 `bash deploy.sh update`。构建失败发生在停止原站之前；备份等迁移前步骤失败会尝试恢复原进程。存在 pending 时，入口使用新版部署器完成 pending 指定的原包，不越过迁移保护切换提交，完成后会提示再运行同一命令更新源码。仍在运行的部署或遗留锁不会被自动抢占，迁移后失败也不会自动回退生产库。
 
-### D. 云服务器：备份配置并部署固定版本
-
-```bash
-(
-set -euo pipefail
-umask 077
-. /opt/problemforge-tools/env.sh
-cd /root/ProblemForge
-test "$(id -u)" = 0
-test -f /opt/problemforge/.problemforge-managed
-test -L /opt/problemforge/current
-test ! -e /opt/problemforge/shared/pending-deploy.json
-test ! -e /opt/problemforge/.deploy.lock
-test -z "$(git status --porcelain)"
-git merge-base --is-ancestor 5142c4e6bd9e92bf672d84527076c7bba0806ca1 HEAD
-
-ss -lntp '( sport = :80 or sport = :443 or sport = :2019 or sport = :5181 or sport = :25432 or sport = :26379 or sport = :25050 or sport = :25051 )'
-node scripts/cloud-deploy.mjs check-caddy
-node scripts/cloud-deploy.mjs status
-
-pf_config_backup="/opt/problemforge/shared/backups/config-before-$(date +%Y%m%d-%H%M%S)"
-mkdir -m 700 "$pf_config_backup"
-for pf_name in settings.json app.env api.env infra.env binaries.json ecosystem.config.cjs bootstrap-admin.txt; do
-  cp -a "/opt/problemforge/shared/$pf_name" "$pf_config_backup/"
-done
-cp -a /root/.hydro/Caddyfile "$pf_config_backup/Caddyfile"
-readlink -f /opt/problemforge/current > "$pf_config_backup/previous-release.txt"
-printf '配置备份：%s\n' "$pf_config_backup"
-
-pf_build="git-$(git rev-parse HEAD)"
-pf_release="$PWD/.local/releases/cloud-$pf_build/problemforge"
-if [ ! -f "$pf_release/cloud-release.json" ]; then
-  node scripts/package-cloud.mjs "$pf_build"
-fi
-printf '本次部署包：%s\n' "$pf_release"
-bash "$pf_release/deploy.sh"
-)
-```
-
-升级不再传 secrets 或 settings 文件，安装器沿用 `/opt/problemforge/shared` 的实际配置。提交检查要求同时包含四项功能修复和 Caddy Origin 修复。先核对监听归属；安装器在准备应用前也会自动检查本站端口，冲突即停止。不要从源码根目录直接执行安装，因为那里没有发布清单。
-
-脚本先准备新版本及沙箱镜像，再检查无活动任务、停止本站 API/Worker，自动完成数据库与私有文件的一致备份，输出「一致备份已保存」路径；然后检查基础设施、迁移状态、启动新版、切换 current、更新本站 Caddy 块并验证 HTTPS。备份目录包含 database.dump、storage.tar、state.json、manifest.json，与上面的配置备份共同保留。前端构建及沙箱阶段可能较慢，直到明确显示「部署完成」才继续。
-
-### E. 云服务器和浏览器：确认升级结果
-
-```bash
-(
-set -euo pipefail
-. /opt/problemforge-tools/env.sh
-bash /opt/problemforge/current/deploy.sh status
-cat /opt/problemforge/shared/last-deploy.json
-pf_expected="$(git -C /root/ProblemForge rev-parse HEAD)"
-pf_actual="$(node -p 'JSON.parse(require("node:fs").readFileSync("/opt/problemforge/shared/last-deploy.json", "utf8")).gitCommit')"
-test "$pf_expected" = "$pf_actual"
-test ! -e /opt/problemforge/shared/pending-deploy.json
-printf '%s\n' '部署版本一致，健康检查通过，无待完成部署。'
-)
-```
-
-浏览器打开 `https://problems.cwnupaa.com` 并强制刷新，用原账号登录。核对：归档勾选立即刷新、创建者列可见；新建题面含 `\Note`；含两个样例的题目重新「构建 PDF」，确认样例合表及题头文件名/时空限制左对齐。历史 PDF 保留原样，旧已发布模板无需重新发布。管理员运行页面应显示两类 Worker / 沙箱健康；按原站验收方式运行一项小型判题任务，检查状态及日志能正常完成。
-
-### 出错时：保留同版本与备份
-
-保留失败步骤最后的输出，可查看本项目日志，不发送私有配置或密码：
-
-```bash
-tail -n 80 /opt/problemforge/shared/logs/api.err.log
-tail -n 80 /opt/problemforge/shared/logs/tex.err.log
-tail -n 80 /opt/problemforge/shared/logs/judge.err.log
-```
-
-迁移前失败时脚本会尝试恢复原进程；原因解决后，在同一个源码提交重试 D。迁移已开始时保留 pending，原备份路径也在其中，不能继续拉取并部署其他提交。**先解决明确的报错原因**，再执行以下同版本重试；不适用于仍在运行或锁状态未明确的部署：
-
-```bash
-(
-set -euo pipefail
-. /opt/problemforge-tools/env.sh
-test ! -e /opt/problemforge/.deploy.lock
-pf_pending_build="$(node -p 'JSON.parse(require("node:fs").readFileSync("/opt/problemforge/shared/pending-deploy.json", "utf8")).buildId')"
-[[ "$pf_pending_build" =~ ^[a-z0-9][a-z0-9.-]{2,80}$ ]]
-bash "/opt/problemforge/releases/$pf_pending_build/deploy.sh"
-)
-```
-
-本机健康但 HTTPS 未通过时，先核对域名/Caddy 再重试该包。旧 P1001/网络映射或 tsx 预加载问题使用上文对应恢复章节。遗留锁需核对其 PID 与进程状态，不能直接删除。现有 PM2 部署器没有覆盖生产数据库的一键回滚，迁移后失败不能只把 current 指回旧代码；若需从备份恢复，应先核对备份版本、数据库和完整文件，并单独确定恢复方案。不要使用 root 的 `pm2 restart all` 或清理 Docker 数据卷。
-
-本节只做源码核对和命令语法检查，尚未在目标服务器执行；执行结果以服务器输出和实际业务验收为准。
-
-依据：[Caddy reload](https://caddyserver.com/docs/command-line#caddy-reload)、[Caddy 管理接口](https://caddyserver.com/docs/api#get-configpath)、[Node 22.23.3 官方校验清单](https://nodejs.org/dist/v22.23.3/SHASUMS256.txt)、[Ubuntu Compose 包](https://packages.ubuntu.com/noble/docker-compose-v2)。
+本机已验证真实镜像构建、Git 打包和无监听的 Linux 命令夹具；夹具中的 Docker、PM2、Caddy、数据库与 HTTP 使用模拟响应。目标服务器最终结果仍以该服务器输出及网站验收为准。

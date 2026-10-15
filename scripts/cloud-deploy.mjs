@@ -11,17 +11,20 @@ import { APP_NAMES, CADDY_BEGIN, INSTALL_ROOT as root, SERVICE_USER as user,
 import { deployWorkflow } from './cloud-workflow.mjs';
 import { runCloudCommand } from './cloud-process.mjs';
 import { inspectCloudPorts, assertCloudPorts, repairCloudNetwork, assertHostPortUse, hostProbeCode } from './cloud-network.mjs';
+import { cloudSourceRevision, stageCloudUpdate } from './cloud-update.mjs';
+import { prepareCloudSandboxes } from './cloud-images.mjs';
 
 let source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const shared = `${root}/shared`, current = `${root}/current`, marker = `${root}/.problemforge-managed`;
 const args = process.argv.slice(2);
 const command = args[0] && !args[0].startsWith('--') ? args.shift() : 'install';
 const recoveringNetwork = command === 'resume-network';
+const updating = command === 'update';
 const flags = {};
 for (let i = 0; i < args.length; i++) {
   const name = args[i];
   if (name === '--help') { flags.help = true; continue; }
-  if (!['--secrets-file', '--settings-file'].includes(name) || !args[i + 1] || flags[name]) throw new Error('参数：install / resume-network / plan / check-caddy / status / backup / reload-api；--secrets-file JSON；--settings-file JSON');
+  if (!['--secrets-file', '--settings-file'].includes(name) || !args[i + 1] || flags[name]) throw new Error('参数：install / update / resume-network / plan / check-caddy / status / backup / reload-api；--secrets-file JSON；--settings-file JSON');
   flags[name] = resolve(args[++i]);
 }
 const exists = async path => { try { await access(path); return true; } catch { return false; } };
@@ -249,8 +252,23 @@ async function backup(previous) {
   await appNode(previous.path, ['scripts/ops-state.ts', '--quiescent'], { output: `${out}/state.json` });
   await compose(previous.path, previous.manifest.buildId, ['exec', '-T', 'postgres', 'pg_dump', '-U', 'problemforge', '-d', 'problemforge', '--format=custom', '--no-owner'], { output: `${out}/database.dump` });
   await run('tar', ['-cpf', `${out}/storage.tar`, '-C', `${shared}/storage`, '.']); await chmod(`${out}/storage.tar`, 0o600);
+  const names = ['state.json', 'database.dump', 'storage.tar'];
+  await mkdir(`${out}/configuration`, { mode: 0o700 });
+  for (const name of ['settings.json', 'app.env', 'api.env', 'infra.env', 'binaries.json', 'ecosystem.config.cjs', 'bootstrap-admin.txt']) {
+    const path = `${shared}/${name}`;
+    if (!await exists(path) && ['binaries.json', 'bootstrap-admin.txt'].includes(name)) continue;
+    const stat = await lstat(path);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`备份配置不是普通文件：${name}`);
+    await copyFile(path, `${out}/configuration/${name}`);
+    await chmod(`${out}/configuration/${name}`, 0o600);
+    names.push(`configuration/${name}`);
+  }
+  await copyFile(settings.caddyFile, `${out}/configuration/Caddyfile`);
+  await chmod(`${out}/configuration/Caddyfile`, 0o600);
+  await writeFile(`${out}/configuration/previous-release.txt`, `${previous.path}\n`, { mode: 0o600 });
+  names.push('configuration/Caddyfile', 'configuration/previous-release.txt');
   const files = {};
-  for (const name of ['state.json', 'database.dump', 'storage.tar']) {
+  for (const name of names) {
     const hash = createHash('sha256'); for await (const chunk of createReadStream(`${out}/${name}`)) hash.update(chunk);
     files[name] = hash.digest('hex');
   }
@@ -291,8 +309,8 @@ async function activateCaddy() {
 }
 
 async function main() {
-  if (flags.help) { console.log('sudo bash deploy.sh [install|status|backup|reload-api]\n首次：--secrets-file /私有路径/problemforge.secrets.json\n可选首次配置：--settings-file settings.json\n只读预览：bash deploy.sh plan\n只读 Caddy 检查：node scripts/cloud-deploy.mjs check-caddy --settings-file settings.json\n旧包网络恢复并继续同一版本：node scripts/cloud-deploy.mjs resume-network\n详见 docs/CADDY_PM2.md'); return; }
-  if (!['install', 'resume-network', 'plan', 'check-caddy', 'status', 'backup', 'reload-api'].includes(command)) throw new Error('未知部署命令');
+  if (flags.help) { console.log('sudo bash deploy.sh [install|update|status|backup|reload-api]\n已有站点：在 Git 源码目录拉取代码后运行 bash deploy.sh update\n首次：--secrets-file /私有路径/problemforge.secrets.json\n可选首次配置：--settings-file settings.json\n只读预览：bash deploy.sh plan\n只读 Caddy 检查：node scripts/cloud-deploy.mjs check-caddy --settings-file settings.json\n旧包网络恢复并继续同一版本：node scripts/cloud-deploy.mjs resume-network\n详见 docs/CADDY_PM2.md'); return; }
+  if (!['install', 'update', 'resume-network', 'plan', 'check-caddy', 'status', 'backup', 'reload-api'].includes(command)) throw new Error('未知部署命令');
   const settingsInput = flags['--settings-file'] ? await json(flags['--settings-file']) : undefined;
   if (command === 'plan') {
     const proposed = cloudSettings(settingsInput);
@@ -317,7 +335,7 @@ async function main() {
     source = pendingReleasePath(await json(`${shared}/pending-deploy.json`));
     if (await realpath(source) !== source || !await exists(`${source}/.prepared`)) throw new Error('待完成版本不是已准备的原始部署目录');
   }
-  const manifest = command === 'install' || recoveringNetwork ? await verifyRelease(source) : null;
+  let manifest = command === 'install' || recoveringNetwork ? await verifyRelease(source) : null;
   if (command !== 'install' && !await exists(marker)) throw new Error('尚未部署');
   await provision(settingsInput, flags['--secrets-file']);
   const lock = `${root}/.deploy.lock`;
@@ -330,7 +348,27 @@ async function main() {
     const pendingFile = `${shared}/pending-deploy.json`;
     const pending = await exists(pendingFile) ? await json(pendingFile) : null;
     if (recoveringNetwork && pendingReleasePath(pending) !== source) throw new Error('待完成版本已变化；停止网络恢复');
-    checkPendingDeployment(pending, recoveringNetwork ? 'install' : command, manifest?.buildId);
+    if (updating) {
+      if (!previous) throw new Error('update 仅用于已有站点，首次安装请使用发布包 install');
+      await checkHostPortUse();
+      if (pending) {
+        source = pendingReleasePath(pending);
+        if (await realpath(source) !== source || !await exists(`${source}/.prepared`)) throw new Error('未完成版本不是原托管发布目录');
+        manifest = await verifyRelease(source);
+        say(`先完成原未完成版本 ${manifest.buildId}，不切换到其他提交。`);
+      } else {
+        const commit = await cloudSourceRevision(source, run);
+        const last = await exists(`${shared}/last-deploy.json`) ? await json(`${shared}/last-deploy.json`) : null;
+        if (previous.manifest.gitCommit === commit && last?.gitCommit === commit && last.buildId === previous.manifest.buildId && last.httpsVerified === true) {
+          await verifyRelease(previous.path);
+          await status(); say(`当前站点已是 ${commit.slice(0, 12)}，无需重复部署。`); return;
+        }
+        say(`准备更新到 ${commit.slice(0, 12)}：自动打包、备份并部署。`);
+        const staged = await stageCloudUpdate(source, commit, run, bins.node);
+        source = staged.source; manifest = staged.manifest;
+      }
+    }
+    checkPendingDeployment(pending, recoveringNetwork || updating ? 'install' : command, manifest?.buildId);
     if (command === 'status') { await status(); return; }
     if (!previous && command !== 'install' && !recoveringNetwork) throw new Error('没有已安装的应用版本');
     if (command === 'reload-api') { await pm2(['reload', APP_NAMES[0]]); await pm2(['save']); await status(); return; }
@@ -339,24 +377,30 @@ async function main() {
       try { await backup(previous); } finally { await processAction('restart'); }
       await status(false); return;
     }
-    await checkHostPortUse();
+    if (!updating) await checkHostPortUse();
     let release, backupPath = pending?.backupPath ?? null;
     await deployWorkflow({
       prepare: async () => {
         release = await prepare(manifest);
       },
       buildSandboxes: async () => {
-        if (recoveringNetwork) {
+        if (recoveringNetwork || pending) {
           const rows = await inspectCloudPorts(argv => run(bins.docker, argv, { capture: true, timeout: 10000 }), settings.ports, manifest.buildId);
+          const receipt = await exists(`${release}/.sandbox-images.json`) ? await json(`${release}/.sandbox-images.json`) : null;
+          if (receipt && (receipt.format !== 1 || receipt.buildId !== manifest.buildId)) throw new Error('未完成版本的镜像记录无效');
           for (const kind of ['tex', 'judge']) {
             const image = await run(bins.docker, ['image', 'inspect', `problemforge-${kind}:${manifest.buildId}`, '--format', '{{.Id}}'], { capture: true, timeout: 10000 });
-            if (rows.find(row => row.name === `${kind}-sandbox`).actual.imageId !== image) throw new Error(`${kind} 镜像标签已变化；停止同版本恢复`);
+            if (rows.find(row => row.name === `${kind}-sandbox`).actual.imageId !== image || receipt && receipt.images?.[kind]?.imageId !== image) throw new Error(`${kind} 镜像标签已变化；停止同版本恢复`);
           }
           say(`继续待完成版本 ${manifest.buildId}；复用已构建的 TeX / Judge 镜像。`);
           return;
         }
-        say('构建独立 TeX / Judge 沙箱镜像（独立下载缓存；最长 30 分钟，可按 Ctrl+C 取消）。');
-        await compose(release, manifest.buildId, ['--progress', 'plain', 'build', 'tex-sandbox', 'judge-sandbox'], { processGroup: true });
+        const receiptPath = `${release}/.sandbox-images.json`;
+        await prepareCloudSandboxes({ directory: release, manifest, previous,
+          receipt: await exists(receiptPath) ? await json(receiptPath) : null,
+          docker: argv => run(bins.docker, argv, { capture: true, timeout: 30000 }),
+          build: service => compose(release, manifest.buildId, ['--progress', 'plain', 'build', service], { processGroup: true }),
+          save: value => writeOwned(receiptPath, JSON.stringify(value, null, 2)), say });
       },
       quiesce: () => quiesce(previous), backup: async () => { backupPath = await backup(previous); },
       startInfrastructure: async () => {
@@ -402,7 +446,9 @@ async function main() {
           : '数据库迁移阶段已开始，应用已停下；不自动降级数据库或重启旧版本。保留配置、备份和日志，修复原因后重试同一部署包。');
       },
     }, !!previous && !pending);
-    say(`部署完成。管理员凭据：${shared}/bootstrap-admin.txt；普通用户使用协会账号登录。`);
+    say(`部署完成：${manifest.buildId}，本机及 HTTPS 健康检查通过。`);
+    if (!previous) say(`管理员凭据：${shared}/bootstrap-admin.txt；普通用户使用协会账号登录。`);
+    if (updating && pending) say('原未完成版本已收尾；再运行 bash deploy.sh update 可更新到源码目录的最新提交。');
   } finally { await handle.close(); await rm(lock); }
 }
 main().catch(error => { console.error(`[ProblemForge] ${error.message}`); process.exitCode = 1; });

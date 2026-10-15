@@ -51,7 +51,7 @@ sudo bash "$pf_release/deploy.sh" --secrets-file "$PWD/../problemforge.secrets.j
 
 Git 仓库保存源码，`cloud-release.json` 和 `release.json` 在打包时生成。因此需要先生成上面的固定发布目录，再调用其中的 `deploy.sh`；直接在新克隆的仓库根目录运行安装会提示缺少清单。打包只用 Git、Node 和 tar，无需提前安装项目 node_modules；服务器部署过程会安装项目依赖。密钥不要提交到 GitHub，根目录同名私有 JSON 也已加入忽略规则。
 
-以后升级先在克隆目录执行 `git pull --ff-only`，再运行上面的 `pf_build` 至 `sudo bash` 部分。同一 Git 提交复用同一构建标识，失败时重试原命令；有未完成迁移时先完成当前版本，不先拉取其他版本。已有站点会继续使用服务器保存的私有配置，升级不要求再次上传密钥文件。保持克隆目录的源码干净，服务器修改放在 `/opt/problemforge/shared`，不要直接修改发布目录中的代码。
+以后升级在服务器的 Git 源码根目录执行 `git pull --ff-only origin master && sudo bash deploy.sh update`（root 账户无需 sudo）。入口自动打包、校验、准备、备份和部署，沿用服务器私有配置；已有 `/opt/problemforge-tools/env.sh` 时自动加载。源码须干净，不直接改发布目录。未完成的迁移会先按原版本收尾，再提示执行同一命令更新源码提交。
 
 ## 目录、进程和访问边界
 
@@ -63,7 +63,7 @@ Git 仓库保存源码，`cloud-release.json` 和 `release.json` 在打包时生
 | `shared/app.env` / `api.env` | 应用配置 / API 专用协会 APPKEY，权限 640；Worker 不加载 api.env |
 | `shared/infra.env` / `bootstrap-admin.txt` | 容器密钥 / 初始管理员凭据，权限 600 |
 | `shared/pm2` / `logs` | 本项目专用 PM2_HOME / 日志；与服务器其他 PM2 进程组独立 |
-| `shared/backups` | 升级或手动生成的数据库、文件和哈希清单，目录权限 700 |
+| `shared/backups` | 升级或手动生成的数据库、文件、服务器配置和哈希清单，目录权限 700 |
 | `127.0.0.1:5181` | PM2 API cluster，共同提供生产网页、API 和 SSE |
 | `127.0.0.1:25432 / 26379` | 专用 PostgreSQL / Redis |
 | `127.0.0.1:25050 / 25051` | TeX / Judge 独立 Linux 沙箱，需各自令牌 |
@@ -102,7 +102,7 @@ sudo bash /opt/problemforge/current/deploy.sh backup
 
 `status` 检查 API / 两个 Worker 的进程数、本机全部依赖及域名 HTTPS。`reload-api` 只滚动重载同一版本的 API，不执行迁移或重启 Worker；已有 SSE 会重新连接。PM2 仅控制本项目三个名称的进程，发现未知进程则拒绝维护操作。
 
-升级：把新源码包解压到新的上传目录，在其中执行 `sudo bash deploy.sh`。无需再次传入私有 JSON。先构建新版本，再要求无排队/执行任务和未完成存储预留，关闭本项目 API、再次检查后停止 Worker；保存原库 `pg_dump`、完整私有文件、业务计数/文件哈希和备份清单，才开始迁移和切换。升级会有短暂维护窗口，不承诺零停机数据库升级。
+日常升级使用源码目录的 `bash deploy.sh update`。离线上传的发布包仍可在解压目录执行 `sudo bash deploy.sh`。无需再次传入私有 JSON。先构建新版本，再要求无排队/执行任务和未完成存储预留，关闭本项目 API、再次检查后停止 Worker；保存原库 `pg_dump`、完整私有文件、业务计数/文件哈希、服务器配置与 Caddyfile 及备份清单，才开始迁移和切换。升级会有短暂维护窗口，不承诺零停机数据库升级。
 
 迁移开始前失败会恢复原进程。迁移开始后失败不会自动运行旧版本或反向修改数据库；`pending-deploy.json` 保留待完成版本和原备份位置，只允许检查状态或重试同一个部署包。新应用不健康时会停下；应用本机健康但 HTTPS 失败时保留新应用，修复域名/Caddy 后重试同一部署包完成收尾。
 
@@ -112,11 +112,13 @@ sudo bash /opt/problemforge/current/deploy.sh backup
 
 `problemforge-pm2.service` 用于开机恢复已保存的本项目 PM2 进程组；不替换其他 PM2 服务。日志由 `/etc/logrotate.d/problemforge` 轮转，容器 JSON 日志也有大小与份数限制。当前运行的 PM2 无需为安装开机服务而被强制关闭，实际主机重启仍属于云端验收。
 
+沙箱镜像按 Dockerfile、COPY 文件和 .dockerignore 的实际哈希比较，应用更新时复用原站运行中的镜像，仅构建改变的沙箱。复用前检查 Compose 项目、服务、运行状态和镜像 ID；每个发布目录保存 `.sandbox-images.json` 供失败重试校验。镜像来源或已有标签不一致会停止，不覆盖未知镜像。
+
 ## 打包与验证范围
 
 开发者在干净的已提交工作区执行 `pnpm package:cloud <版本标识>`，输出位于 Git 忽略的 `.local/releases/`。包包含来源提交、迁移清单及逐文件 SHA-256，打包器拒绝私有数据路径、路径越界和符号链接；部署前重新核对，不复制开发 node_modules。
 
-定向入口：`node --test scripts/cloud-deploy.test.mjs scripts/cloud-network.test.mjs scripts/cloud-process.test.mjs`；跨进程 SSE 的实 Redis 检查为 `PF_VERIFY_REDIS=1 node --import tsx --test apps/api/src/stream-lease.test.ts`，仅使用随机验证键并清理；默认快查没有扩展。`scripts/verify-cloud-runtime.mjs --build-check` 是独立 Linux 构建检查，用无 HTTP 监听、无应用数据库的夹具核对真实 PM2 的 ESM / tsx 加载、环境文件、两个 cluster 进程及重载信号，同时运行 Caddy adapt/validate。
+定向入口：`node --test scripts/cloud-deploy.test.mjs scripts/cloud-network.test.mjs scripts/cloud-process.test.mjs scripts/cloud-update.test.mjs scripts/cloud-images.test.mjs`；跨进程 SSE 的实 Redis 检查为 `PF_VERIFY_REDIS=1 node --import tsx --test apps/api/src/stream-lease.test.ts`，仅使用随机验证键并清理；默认快查没有扩展。`scripts/verify-cloud-runtime.mjs --build-check` 是独立 Linux 构建检查，用无 HTTP 监听、无应用数据库的夹具核对真实 PM2 的 ESM / tsx 加载、环境文件、两个 cluster 进程及重载信号，同时运行 Caddy adapt/validate。
 
 云端沙箱构建默认使用清华 TUNA Debian 镜像，APT 保留签名验证和已固定的工具版本；基础镜像没有 CA 证书包，默认使用镜像站支持的 HTTP 地址。可在 `/opt/problemforge/shared/infra.env` 中设置 `DEBIAN_MIRROR` / `DEBIAN_SECURITY_MIRROR` 覆盖。两类沙箱分开缓存锁，TeX 包合并安装；下载空闲超时 30 秒、重试 3 次，构建总超时 30 分钟。新增 `scripts/cloud-process.test.mjs` 定向检查超时和 Ctrl+C 后父进程及插件退出、信号监听清理、备份排他写入；不加入默认快查。旧版慢构建的停止、遗留锁检查与恢复命令见 [分步指引](DEPLOY_HYDRO_CADDY.md)。
 

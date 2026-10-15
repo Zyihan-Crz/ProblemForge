@@ -978,3 +978,16 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **实际验证：**Node 语法及 15 项部署检查通过，其中新增准备阶段失败不停止旧应用/不迁移断言。独立 Linux Docker 构建 network=none，调用从实际部署代码提取的 sealRelease，复现 umask 077 旧逻辑失败，并验证 077/027/022 的 loader、真实 TypeScript、prepared 权限重试、字节哈希保持、目录 0750/普通文件 0640/原可执行文件 0750、服务用户不可写；生产 prepare 对已 prepared 的符号链接在变更前拒绝。证据 `.local/caddy-pm2/release-permissions-evidence/release-permissions-check.json`。没有 HTTP 监听、应用数据库或作者程序/TeX 执行。指南 21 个 Bash 块、恢复用 Node heredoc 和原 PowerShell 块均通过语法检查；未执行云端恢复块。
 
 **边界与收尾：**本机原 5180/3100 进程仍为 Vite 32304 / API 88612，命令行来自主目录，未重启原服务、修改业务数据库、存储或模板。未登录云主机、修改其他项目或发布公网；用户服务器权限核对、同版本重试和网站验收仍待执行。PLAN/部署指南已同步，差异检查通过后本地提交，不 push。
+## 日常更新入口与 Judge APT 依赖冲突修复（2026-10-15）
+
+**用户反馈与定位：**用户明确要求已有站点更新应收敛为拉取代码再执行更新，反对继续追加手工部署/补救命令。最新服务器日志已进入 Judge 镜像构建，说明该次操作越过此前的 tsx 预加载失败；APT 为 `python3.11=3.11.2-6+deb12u8` 自动选择 u9 的 minimal/stdlib，造成严格相等依赖冲突。失败位于 buildSandboxes，早于本次静止业务与数据库迁移，未据此推断其他操作或服务器当前运行状态。
+
+**实现：**补齐 Python 默认包、minimal、stdlib 及 Python 3.11 四个同源包的完整版本锁定，保留原固定 Python/GCC/JDK 工具链与判题缓存标识。新增 `bash deploy.sh update`，在源码目录自动加载已配置的 `/opt/problemforge-tools/env.sh`，由最新版部署器执行原有预检、端口归属检查与独占部署锁，要求干净 Git 根目录，自动打包并校验完整提交对应的不可变发布包。已有准备包重新校验后复用；已部署且 HTTPS 成功的同提交只检查状态；pending 保留原版本并由新版驱动收尾，明确提示再执行同一 update 更新源码，避免悄悄跳过未完成迁移。
+
+沙箱按 Dockerfile、COPY 输入与 .dockerignore 哈希识别变化，应用更新不再调用未变化沙箱的构建；复用前核对本站 Compose 项目/服务、运行状态、发布标签及实际镜像 ID。每类镜像完成后保存 `.sandbox-images.json`，重试检查并复用已完成部分，镜像标签或输入改变则停止。本次 Judge Dockerfile 改变需构建一次。原一致备份加入 `configuration/`（服务器配置、环境文件、PM2 配置、Caddyfile、原发布目录），文件 0600、目录 0700，全部纳入 SHA-256 清单，仍在迁移前完成。更新指南改为本机推送后、服务器 `git pull --ff-only origin master && bash deploy.sh update`，保留首次部署和专门故障诊断说明。
+
+**实际验证：**31 项定向检查通过（cloud-deploy、cloud-network、cloud-update、cloud-images），包括真实临时 Git 仓库/打包器、中文文件名、重复包校验、脏源码拒绝、按需构建与失败重试、未知容器或镜像标签拒绝、原有迁移顺序与端口保护。真实 Judge Docker build 使用与云端相同的 TUNA 源构建通过，单独构建步骤核对全部 Python 3.11 包均为 `3.11.2-6+deb12u8`、默认 Python 包为 `3.11.2-1+b1`，GCC `12.2.0-14+deb12u1`、JDK `17.0.20.1+1-1~deb12u1` 不变，工具版本执行通过；未执行作者代码。镜像为 `problemforge-judge:update-check-20261015`，未替换原开发容器，证据 `.local/caddy-pm2/judge-evidence/judge-packages.txt`。
+
+Linux 完整入口夹具实际运行 Bash update、自动加载 env.sh、Git 打包与文件备份；Docker/PM2/Caddy/数据库/HTTP 命令均模拟且不监听。验证端口冲突早于打包退出、构建失败保留原站、再次 update 复用已准备应用与 TeX、备份文件内容/权限/哈希、备份先于迁移、正确提交激活、重复调用不重新部署、源码变新时 pending 仍完成原包、私有配置与既有 Caddy 文本保留。证据 `.local/caddy-pm2/update-evidence/update-check.json`，夹具源码在同目录 verify-update.mjs / update-commands.mjs。部署指南全部 16 个 Bash 块、1 个 PowerShell 块及 deploy.sh 语法检查通过；未执行文档中的 push/SSH 命令。
+
+**环境、未验证与收尾：**主目录原 5180/3100 仍为 Vite 32304 / API 88612，命令行加载 `D:\project\ProblemForge`。没有重启开发服务、修改原数据库/模板/存储、开放新端口或启动部署演练实例；仅无监听的 Docker 构建及模拟外部依赖的验证。目标服务器的本次升级、真实备份/迁移、HTTPS 和题目功能验收仍待用户执行，不将夹具计作生产部署成功。未登录云主机、操作其他项目或发布公网。README/部署指南/PLAN 同步，完成差异检查后本地提交，不 push。
