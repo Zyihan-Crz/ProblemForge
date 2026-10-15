@@ -180,6 +180,35 @@ node scripts/cloud-deploy.mjs resume-network
 
 它只补接 `problemforge-cloud` 四个基础服务的宿主机访问网络，不重启 Docker 或服务器。实际回环映射和应用用户 TCP 连接检查通过后，继续同一版本的部署，包括既有的本站 PM2、Caddy 合并及 HTTPS 验证。原 Caddy 配置仍须完整匹配才会合并本站域名。看到“部署完成”才进入下一步；若出现冲突、锁或其他报错，保留提示和 pending，不清卷或删除 pending。
 
+### Caddy 报 caddy.listeners.layer4 未注册
+
+该错误说明此次用于读取配置的 Caddy 可执行程序没有注册配置需要的 `caddy.listeners.layer4` 模块。部署器当前通过 PATH 的 `command -v caddy` 查找程序，再解析符号链接；它可能与正在监听 80/443 的程序不同，也可能是当前文件配置与运行配置不一致，不能只凭版本号确定。`caddy list-modules` 用于列出当前可执行程序中的模块，见 [官方命令说明](https://caddyserver.com/docs/command-line#caddy-list-modules)。
+
+先在云服务器 root 终端执行以下只读诊断，保留现有配置和运行进程。这里只打印命令路径、监听归属、进程及模块名，不输出私有环境变量或完整 Caddyfile，不重载、安装或重启服务。
+
+```bash
+(
+. /opt/problemforge-tools/env.sh
+type -a caddy
+pf_caddy_cli="$(sh -c 'command -v caddy')"
+printf '部署器使用的程序：%s\n' "$pf_caddy_cli"
+readlink -f "$pf_caddy_cli"
+"$pf_caddy_cli" version
+"$pf_caddy_cli" list-modules | grep -Fx 'caddy.listeners.layer4' || true
+
+ss -lntp '( sport = :80 or sport = :443 or sport = :2019 )'
+ps -eo pid,comm,args | grep '[c]addy'
+for pf_pid in $(pgrep -x caddy || true); do
+  printf '\n运行中的 Caddy PID=%s\n' "$pf_pid"
+  readlink "/proc/$pf_pid/exe"
+  "/proc/$pf_pid/exe" version
+  "/proc/$pf_pid/exe" list-modules | grep -Fx 'caddy.listeners.layer4' || true
+done
+)
+```
+
+保留并提供完整输出。若正在运行的程序包含该模块而 PATH 程序不包含，后续应让本项目部署命令使用已核实的现有程序；若二者均缺失或找不到运行进程，需要继续核对配置来源和实际监听者，不能猜测正确路径。进程枚举没有结果也要保留前面的 ps/ss 输出。不要通过删除现有 layer4 配置、直接下载替换全局 Caddy 或升级模块来绕过检查；这些会改变共用服务器上的其他服务。当前错误在 Caddy 适配/预检处产生，本次命令尚未进入部署器的应用停机和数据库迁移阶段；不据此推断此前命令或服务器其他任务的状态。
+
 ### API 启动报 Cannot find package 'tsx'
 
 如果 ProblemForge API 在线数检查失败，并在日志看到 `Cannot find package 'tsx' imported from /opt/problemforge/`，原因是旧配置从 PM2 守护进程目录解析预加载器；已安装的依赖实际位于固定发布目录。这不是要求在 `/opt/problemforge` 或全局重新安装 tsx。新版恢复工具使用发布目录的绝对加载路径，并先以服务用户核验可加载性。

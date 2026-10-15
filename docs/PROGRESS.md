@@ -936,3 +936,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **交付内容：**在 DEPLOY_HYDRO_CADDY 增加独立升级章节 A—E：本机工作区/推送校验、云端托管标记/端口归属/当前健康/锁和 pending 检查、干净 master 快进拉取及包含修复提交校验、Caddy 文件与运行配置核对、私有配置及原 current 备份、按完整 Git SHA 生成不可变包并调用其中 deploy.sh。已有实例不再传首次 secrets/settings，保留服务器实际配置。明确部署器自动静止写入并备份 database.dump / storage.tar / state.json / manifest.json 后才迁移切换；收尾核对 last-deploy.gitCommit、完整健康、无 pending，并要求浏览器验收四项修复与小型判题。补充同版本失败恢复、日志路径及无生产库一键回滚的现有限制，不提供绕开 pending、全局 PM2 重启、删除数据卷或直接回指旧版本的操作。
 
 **实际验证与边界：**逐段核对 cloud-deploy / cloud-workflow / cloud-config / package-cloud / cloud-database 的实际行为；全部 17 个 Bash 代码块经 Git Bash `-n`、1 个 PowerShell 块经语法树解析通过，均未执行代码块内容。证据 `.local/deploy-guide/syntax.json` 与 powershell-syntax.json，命令中推送、服务器读写及部署都没有运行。文档差异检查通过，未改应用代码、依赖、数据库或原开发服务；不重跑功能测试、TeX/Judge 或全量检查。目标服务器当前状态、备份、升级与业务验收等待用户执行，已有站点由用户确认，不冒充远程实测；无文档交付阻塞，更新 PLAN 后本地提交，不 push。
+
+## 云端 Caddy layer4 模块缺失诊断（2026-10-15）
+
+**用户日志与确定事实：**用户执行升级流程后返回 Caddyfile 第 9 行 `servers` 解析失败，模块 `caddy.listeners.layer4` 未注册；日志中的实际程序为 `/nix/store/hq1123yp4m1rf0b1z9wp7c3wqm47569i-caddy-2.10.2/bin/caddy`。核对部署器 findBinary 使用 PATH 中的 `command -v caddy` 并 realpath，check-caddy 与完整部署预检均沿用该选择。错误发生在 Caddy 适配/验证阶段，早于该次命令的应用停止和数据库迁移；不能推断之前命令或其他服务的状态，也不能仅凭报错判定运行中的 Caddy 缺模块或一定存在另一份正确程序。
+
+**已完成与待确认：**核对 Caddy 官方 list-modules 说明，在 DEPLOY_HYDRO_CADDY 加入只读对照命令：PATH 与符号链接路径、CLI 版本/模块、80/443/2019 监听归属、Caddy 进程和 `/proc/<pid>/exe` 对应程序的版本/模块。不打印私有环境或完整配置，不改 Caddyfile、安装插件、替换全局程序、重载或停止现有服务。正确程序路径、模块列表及配置与运行状态需用户在原服务器返回后确定，暂不按猜测改部署器或重试升级。
+
+**验证与环境：**文档 18 个 Bash 块均通过 Git Bash `-n`，诊断命令没有在本机或云端执行；文档差异检查通过。主目录原 5180/3100 仍为 Vite 32304 / API 88612，命令行确认均加载 D:\project\ProblemForge，未重启或修改原开发环境。仅本地提交文档和交接，不 push；未访问云主机、其他项目配置或业务数据，未运行功能测试/TeX/Judge。当前外部信息缺口是服务器实际运行程序，待用户返回诊断输出后继续。
