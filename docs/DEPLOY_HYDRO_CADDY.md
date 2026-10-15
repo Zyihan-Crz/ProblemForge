@@ -249,6 +249,35 @@ bash /opt/problemforge/current/deploy.sh status
 
 模块检查应打印 `caddy.listeners.layer4`，选中的真实路径应与 `/usr/local/bin/caddy-l4` 的真实路径一致，随后 Caddy 配置匹配和原站状态检查应通过。发现专用入口已有不同目标时命令会停止，不覆盖。路径补充保存在 env.sh，括号子 shell 退出或重新登录后，原升级步骤中的 `. /opt/problemforge-tools/env.sh` 仍会选择正确程序。完成后继续下文 C（拉取代码）、D（备份部署）、E（验收）；任一步报错先处理该错误。此处成功仅表示原站预检通过，不表示新版应用已部署。
 
+### Caddy 管理接口返回 HTTP 403
+
+2026-10-15 用户确认专用入口已选中 `/usr/local/bin/caddy-l4`，且目标模块存在，下一步只读 `check-caddy` 返回 403。`Unnecessary header_up` 是配置适配警告，当前阻塞发生在读取管理接口时。
+
+旧部署器读取 `/config/` 时缺少 `Origin` 请求头，启用 `enforce_origin` 的 Caddy 会拒绝该请求。新版按 [Caddy 官方 CLI](https://github.com/caddyserver/caddy/blob/v2.10.2/cmd/commandfuncs.go#L622-L668) 的做法，发送管理接口自身的 Origin，例如 `http://localhost:2019`；保留回环地址限制、禁止重定向、完整运行配置比对和错误时停止的行为。无需修改现有 Caddy 安全配置。仅凭状态码还不能确认服务器的具体拒绝原因，以新版只读检查的结果为准。
+
+先按下文 A 在本机推送已提交的修复；再在服务器运行以下块。这里使用拉取后源码中的部署器执行 `check-caddy` 和 `status`，因为 `/opt/problemforge/current` 中的旧部署器尚未更新；不要修改旧发布目录的源码或清单。`status` 支持从源码调用，无需先生成发布包。
+
+```bash
+(
+set -euo pipefail
+. /opt/problemforge-tools/env.sh
+test "$(id -u)" = 0
+test -f /opt/problemforge/.problemforge-managed
+test ! -e /opt/problemforge/shared/pending-deploy.json
+test ! -e /opt/problemforge/.deploy.lock
+ss -lntp '( sport = :80 or sport = :443 or sport = :2019 or sport = :5181 or sport = :25432 or sport = :26379 or sport = :25050 or sport = :25051 )'
+cd /root/ProblemForge
+test "$(git branch --show-current)" = master
+test -z "$(git status --porcelain)"
+git pull --ff-only origin master
+git log -1 --oneline
+node scripts/cloud-deploy.mjs check-caddy
+node scripts/cloud-deploy.mjs status
+)
+```
+
+确认监听归属仍为原 Caddy 和本站托管资源；归属异常或上述命令报错即停止。两项检查成功后继续下文 D 备份并部署新固定版本，再执行 E 验收。新版正式激活后，`current/deploy.sh status` 才会使用修复后的部署器。如果仍是 403，保留报错进一步核对管理接口 Host / Origin 限制，不关闭校验或跳过运行配置比较，也不要输出完整 `/config/` 响应。
+
 ### API 启动报 Cannot find package 'tsx'
 
 如果 ProblemForge API 在线数检查失败，并在日志看到 `Cannot find package 'tsx' imported from /opt/problemforge/`，原因是旧配置从 PM2 守护进程目录解析预加载器；已安装的依赖实际位于固定发布目录。这不是要求在 `/opt/problemforge` 或全局重新安装 tsx。新版恢复工具使用发布目录的绝对加载路径，并先以服务用户核验可加载性。
@@ -313,6 +342,8 @@ bash /opt/problemforge/current/deploy.sh status
 ```
 
 核对 settings 的域名、Caddyfile 和端口仍是原配置，80/443 为原 Caddy，其余列出的回环端口为本站托管资源。`status` 应确认本机健康、两 API / 两类 Worker 以及域名 HTTPS 正常。若归属异常，停止，不换端口或停其他项目；安装器正式部署前也会再次自动核对。
+
+如果旧部署器在 Caddy 管理接口处返回 HTTP 403，先完成上文对应小节的源码更新和检查，再进入 D；不要求旧 `current` 在修复安装前通过同一请求检查。
 
 ### C. 云服务器：拉取并确认包含修复
 

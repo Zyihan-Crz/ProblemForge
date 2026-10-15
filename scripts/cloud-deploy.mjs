@@ -113,7 +113,8 @@ async function adaptedCaddy(configArgument = settings.caddyFile) {
 async function checkCaddyAdmin(adapted) {
   const endpoint = caddyAdminEndpoint(adapted);
   let response;
-  try { response = await fetch(endpoint.url, { signal: AbortSignal.timeout(5000), redirect: 'error' }); }
+  // Caddy's CLI sends this header so admin.enforce_origin can validate the request.
+  try { response = await fetch(endpoint.url, { headers: { Origin: `http://${endpoint.address}` }, signal: AbortSignal.timeout(5000), redirect: 'error' }); }
   catch { throw new Error(`无法读取 Caddy 回环管理接口 ${endpoint.address}；请确认现有 Caddy 已启动且管理接口可用`); }
   if (!response.ok) throw new Error(`Caddy 管理接口返回 HTTP ${response.status}，停止修改配置`);
   const configArgument = await matchingCaddyInvocation(settings.caddyFile, adapted, await response.json(), adaptedCaddy);

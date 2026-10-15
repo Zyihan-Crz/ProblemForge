@@ -952,3 +952,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **修正流程：**现有 cloud-deploy 从继承 PATH 查 caddy 并 realpath，因此无需修改不可变旧应用或先升级代码。交付先读取监听、验证 `/usr/local/bin/caddy-l4` 确含目标模块，再在 `/opt/problemforge-tools/bin/caddy` 创建到它的符号链接；已存在不同目标或异常符号链接目录即停止。仅备份并给项目专用 env.sh 追加该目录的 PATH 行，保证退出子 shell/重新登录后，原升级流程 source env.sh 仍有效。加载后核对最终路径，通过旧版 check-caddy 与 status 后再继续拉取、备份部署和验收。流程不替换全局 Caddy、不改 Caddyfile、不安装插件或重启原 Caddy。
 
 **验证和待办：**文档 19 个 Bash 块通过 Git Bash `-n`、差异检查通过；核对现有部署器 cleanEnv / findBinary 继承规则，确认项目入口方式兼容旧版。没有执行服务器修正命令或代为宣布升级完成，实际模块、配置匹配和网站升级验收仍待用户执行。原主目录监听仍为 5180 Vite 32304 / 3100 API 88612，均加载主目录，未重启或改业务数据。只改文档及 PLAN/交接，本地提交，不 push；未运行应用测试、TeX/Judge 或新增服务实例。
+
+## Caddy 管理接口 Origin 兼容修正（2026-10-15）
+
+**用户证据和实现：**用户已回传专用入口指向 `/usr/local/bin/caddy-l4`、含 `caddy.listeners.layer4`，监听 80/443/2019 的仍为原 PID 1380。随后只读 check-caddy 返回 HTTP 403；适配阶段的三条 Unnecessary header_up 为警告。核对官方 Caddy 2.10.2 admin.go 与 cmd/commandfuncs.go：启用 enforce_origin 时会校验 Origin，官方 CLI 对 TCP 管理接口发送自身的 http 来源；本项目原 GET 没有该请求头。现补齐同源 Origin，仍只访问经验证的回环地址，禁止重定向并完整比较运行配置，不改 Caddyfile 的安全限制或旧发布包。用户实际 caddy-l4 版本、enforce_origin 设置及错误响应体尚未取得，仅凭 403 不宣称已确认服务器唯一原因。
+
+**实际验证：**Node 语法及 15 项部署定向检查通过。使用已有本地镜像进行无网络、无监听的 Linux 构建验证：真实 Caddy 2.10.2 适配 enforce_origin 配置，实际执行本项目 check-caddy CLI，管理接口由 fetch 替身模拟。localhost、IPv4 和 IPv6 三种地址均验证请求头正确时匹配成功（含相对配置路径），持续 403 与真实配置字段不一致仍拒绝，Caddyfile 未修改且不输出配置值。证据 `.local/caddy-pm2/caddy-origin-evidence/caddy-origin-check.json`，liveAdminMocked=true、listenerStarted=false；不将其写为真实服务器管理接口验收。文档 20 个 Bash 块语法及 1 个 PowerShell 块语法树解析通过，服务器命令均未执行。
+
+**交付与边界：**DEPLOY_HYDRO_CADDY 增补 403 恢复步骤和旧 current 的检查顺序：用户本机推送修复后，服务器核对端口、托管标记、锁/pending 和干净分支，再快进拉取；用拉取后的源码执行 check-caddy / status，通过后继续备份打包升级。源码 status 支持检查原实例，无需修改不可变旧包。原主目录 5180/3100 仍为 Vite 32304 / API 88612，命令行归属确认，无重启、端口变更、业务数据修改或 TeX/Judge。未访问云主机、修改 Hydro、推送或部署公网；目标主机的拒绝原因、检查和升级结果待用户执行。PLAN 已同步，差异检查通过后本地提交。
