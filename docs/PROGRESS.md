@@ -920,3 +920,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **浏览器实测：**在原 5180 使用独立管理员登录，未点搜索直接勾选后列表由 8 道变为 9 道，已归档 test 可见，取消后立即隐藏。搜索 test 时默认无结果，直接勾选后出现；页面刷新保持勾选与结果。创建者列能区分系统管理员和高明y，现有导入题也正确显示。实看列宽和归档标签正常，console 无 warn/error；检查后恢复普通列表、退出验证会话并关闭临时标签。截图 archived-creators.png 与 browser-verification.json 位于 `.local/problem-list/`。
 
 **环境与未验证：**先核对原 5180/3100 的主目录服务树和零活动任务，再重启原 pnpm dev。收尾根 89628、Vite 60560、API 72592、Worker 87372/75412；归属正确、无额外 Worker、首页 200、健康 ok、stderr 为空。原题目完整记录、文稿/修订和模板指纹前后一致，活动 Build/TestRun 仍为 0，见 before/after 与 services-verified.json。沿用原数据库/存储/模板，没有新端口、实例、依赖或迁移；没有运行 TeX/Judge、全量/E2E、生产构建、外部 OJ 或部署。用户指南和 PLAN 已更新，本轮无阻塞，差异检查后本地 Git 提交，不 push。
+
+## PDF 题头输入输出与时空限制对齐（2026-10-15）
+
+**原因与实现：**用户截图中的 standard input / standard output 比时间、内存向右偏移。题头参数 `{ {{INPUT_FILE}} }` / `{ {{OUTPUT_FILE}} }` 含首尾空格，olymp 使用 texttt 输出文件名时保留开头空格，而时空限制在表格单元格开始处忽略该空白。两套内置题面的单题及 item 入口现去掉四个配置插槽外侧空白；渲染器也仅对按 INPUT_FILE / OUTPUT_FILE / TIME_LIMIT / MEMORY_LIMIT 顺序连续出现的四个插槽参数做同样处理，覆盖已发布模板及原有字面标准题头兼容路径。处理发生在插值前，不改文件名内部空格、显式排版命令或作者正文，不改写数据库模板。单题及比赛版本分别升为 pf-statement-2 / pf-contest-3，沿用现有快照与哈希校验，新构建不会命中旧排版缓存。
+
+**实际验证：**`pnpm check template-engine api tex-worker` 通过；显式运行 policy.test.ts、contest.test.ts、statement-settings.test.ts 共 11 项通过，覆盖两套新模板、旧带空白插槽、旧字面标准题头、单题/单题册、比赛、自定义文件名转义及输入模板不变。原独立 Linux TeX 沙箱编译原库已发布「CWNU 挑战赛比赛题面 v2」单题，以及简洁模板含两个题目的比赛题册（旧带空白 item 夹具），得到 1 页与 3 页 PDF，均 Accepted、退出码 0、无 Overfull。Poppler 渲染并目视检查全部 4 页；标准 I/O、自定义 data_in.txt / data_out.txt 的四行值均左对齐，双样例仍共用表头。文本坐标对照上轮已有 PDF，旧偏差为 5.732428 pt，现单题最大 0.004428 pt、比赛两题均 0.002 pt，均小于 0.01 pt。原文件名内容保留。证据 `.local/header-alignment/verification.json`、alignment.json、PDF/PNG 与日志；沙箱临时文件已清理，未创建业务构建记录。
+
+**环境与收尾：**先核对主目录原服务根 89628、5180/3100 的归属和零活动任务，再仅重启同一 pnpm dev；收尾根 46076、Vite 32304、API 88612、两个 Worker 52220/80352，归属一致且无额外 Worker。首页 200、API 健康 ok、stderr 为空；原题目、文稿/修订、全部模板版本指纹前后一致，活动 Build/TestRun 均为 0，见 before/after、services-verified、final-check.json。继续使用原库、存储、模板与 Linux 沙箱，无新实例/端口、依赖或迁移。未运行真实业务队列构建、浏览器点击、Judge、全量/E2E 或云端部署；用户在原 5180 重新「构建 PDF」即可查看修正。TEMPLATES 与 PLAN 已同步，无阻塞，差异检查后本地 Git 提交，不 push。

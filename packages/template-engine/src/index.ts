@@ -193,7 +193,7 @@ export function printableSample(bytes: Buffer) {
   if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) throw new Error('题面样例包含不能显示的控制字节，原始测试数据未改变');
 }
 export type SamplePaths = { inputPath: string; answerPath: string };
-export const STATEMENT_RENDERER_VERSION = 'pf-statement-1';
+export const STATEMENT_RENDERER_VERSION = 'pf-statement-2';
 export type StatementSettings = { timeLimitMs: number; memoryLimitMb: number; inputFile: string; outputFile: string };
 export function statementSettings(settings: JudgeSettingsValue = defaultJudgeSettings): StatementSettings {
   return {
@@ -202,7 +202,14 @@ export function statementSettings(settings: JudgeSettingsValue = defaultJudgeSet
     outputFile: settings.ioMode === 'STDIO' ? 'standard output' : settings.outputFile,
   };
 }
-export const CONTEST_RENDERER_VERSION='pf-contest-2';
+// Trim only the four adjacent header slot arguments, before inserting values.
+// Unlike table-cell whitespace, a leading space inside olymp's \texttt is visible.
+function alignStatementHeader(source: string) {
+  const fields = ['INPUT_FILE', 'OUTPUT_FILE', 'TIME_LIMIT', 'MEMORY_LIMIT'];
+  const pattern = fields.map(field => String.raw`\{[ \t\r\n]*\{\{${field}\}\}[ \t\r\n]*\}`).join('[ \\t\\r\\n]*');
+  return source.replace(new RegExp(pattern, 'g'), fields.map(field => `{{{${field}}}}`).join(''));
+}
+export const CONTEST_RENDERER_VERSION='pf-contest-3';
 export type ContestRenderInput={title:string;author:string;stage:string;dateHeader:string;dateCover:string;entries:{namespace:string;code:string;body:string;metadata:{title:string;author:string};assetPaths:string[];samples:SamplePaths[];timeLimitMs:number;memoryLimitMb:number;inputFile:string;outputFile:string}[]};
 export function renderContest(files:TemplateFiles,kind:DocumentKind,input:ContestRenderInput){
   validateTemplate(files,kind);
@@ -213,7 +220,7 @@ export function renderContest(files:TemplateFiles,kind:DocumentKind,input:Contes
     CONTENTS:input.entries.map(e=>`\\input{${e.namespace}/item.tex}`).join('\n'),
     PROBLEM_LIST:input.entries.map(e=>`${escapeTex(e.code)} & ${escapeTex(e.metadata.title)} & ${e.timeLimitMs/1000} s & ${e.memoryLimitMb} MB \\\\`).join('\n'),
   };
-  const fill=(source:string,values:Record<string,string>)=>source.replace(/\{\{([A-Z_]+)\}\}/g,(_,k:string)=>values[k]??context[k]??`{{${k}}}`);
+  const fill=(source:string,values:Record<string,string>)=>(kind==='STATEMENT'?alignStatementHeader(source):source).replace(/\{\{([A-Z_]+)\}\}/g,(_,k:string)=>values[k]??context[k]??`{{${k}}}`);
   for(const [name,source]of Object.entries(files))if(/\.(tex|sty|cls|def)$/.test(name)&&!['preview.tex','item.tex'].includes(name))result[name]=fill(source,context);
   result['main.tex']=result['booklet.tex'];
   if(input.entries.some(entry=>entry.samples.length))result['main.tex']=SAMPLE_LAYOUT_PREAMBLE+result['main.tex'];
@@ -245,7 +252,7 @@ export function render(files: TemplateFiles, kind: DocumentKind, body: string, m
   if (kind === 'STATEMENT') for (const name of ['main.tex', 'problem.tex']) if (result[name]) {
     result[name] = result[name].replace(
       String.raw`\begin{problem}{ {{TITLE}} }{standard input}{standard output}{1 s}{256 MB}`,
-      String.raw`\begin{problem}{ {{TITLE}} }{ {{INPUT_FILE}} }{ {{OUTPUT_FILE}} }{ {{TIME_LIMIT}} }{ {{MEMORY_LIMIT}} }`,
+      String.raw`\begin{problem}{ {{TITLE}} }{{{INPUT_FILE}}}{{{OUTPUT_FILE}}}{{{TIME_LIMIT}}}{{{MEMORY_LIMIT}}}`,
     );
   }
   const context = publicationContext(files);
@@ -254,7 +261,7 @@ export function render(files: TemplateFiles, kind: DocumentKind, body: string, m
     CONTENTS: '\\input{problem.tex}', CODE: 'A', TIME_LIMIT: escapeTex(timeLimit), MEMORY_LIMIT: escapeTex(memoryLimit), INPUT_FILE: escapeTex(settings.inputFile), OUTPUT_FILE: escapeTex(settings.outputFile),
     CONTEST_TITLE: escapeTex(context.contestTitle), CONTEST_STAGE: escapeTex(context.contestStage), CONTEST_DATE_HEADER: escapeTex(context.dateHeader), CONTEST_DATE_COVER: escapeTex(context.dateCover),
     PROBLEM_LIST: `A & ${escapeTex(metadata.title)} & ${escapeTex(timeLimit)} & ${escapeTex(memoryLimit)} \\\\\n` };
-  for (const [name, source] of Object.entries(result)) result[name] = source.replace(/\{\{([A-Z_]+)\}\}/g, (_, k: string) => values[k] ?? `{{${k}}}`);
+  for (const [name, source] of Object.entries(result)) result[name] = (kind === 'STATEMENT' ? alignStatementHeader(source) : source).replace(/\{\{([A-Z_]+)\}\}/g, (_, k: string) => values[k] ?? `{{${k}}}`);
   if (mode === 'booklet') { if (!result['booklet.tex']) throw new Error('模板未提供题册入口'); result['main.tex'] = result['booklet.tex']; if(result['item.tex'])result['problem.tex']=result['item.tex']; }
   result['content.tex'] = body;
   if (samples.length) {
