@@ -12,11 +12,11 @@ const lastProblem = /^\/problems\/[a-zA-Z0-9_-]+$/.test(readNavigation('lastProb
 const person = (id:string) => users.value.find(u=>u.id===id)?.name || '未指定';
 let request = 0;
 async function load() {
-  const seq = ++request; loading.value = true; error.value = '';
+  const seq = ++request, requestedPath = route.fullPath; loading.value = true; error.value = '';
   try {
     const query = new URLSearchParams(Object.fromEntries(['q','archived','cursor'].map(k=>[k,value(k)]).filter(([,v])=>v)));
     const result = await api('/problems/page?'+query);
-    if (seq !== request) return;
+    if (seq !== request || route.fullPath !== requestedPath) return;
     problems.value = result.rows; nextCursor.value = result.nextCursor;
     if (!value('cursor')) await router.replace({query:{...route.query,cursor:result.currentCursor}});
   } catch (e) { if (seq===request) { error.value = (e as Error).message; problems.value=[]; nextCursor.value=null; } }
@@ -26,6 +26,7 @@ watch(()=>JSON.stringify([value('q'),value('archived')]),()=>{filter.value=value
 watch(()=>route.fullPath,()=>{writeNavigation('problemsList',route.fullPath);void load();},{immediate:true});
 onMounted(async()=>{try{users.value=(await api('/directory')).users;}catch(e){message.error((e as Error).message);}});
 function search() { previous.value=[]; void router.push({query:{q:filter.value.trim() || undefined,archived:archived.value?'true':undefined}}); }
+function toggleArchived(checked: boolean) { archived.value = checked; search(); }
 function next() { if (nextCursor.value) {previous.value.push(value('cursor'));void router.push({query:{...route.query,cursor:nextCursor.value}});} }
 function back() { const cursor=previous.value.pop();if(cursor)void router.push({query:{...route.query,cursor}}); }
 function latest() { previous.value=[];void router.push({query:{...route.query,cursor:undefined}}); }
@@ -45,13 +46,13 @@ async function create() { creating.value = true; try { const result = await api(
     <form class="panel-toolbar list-toolbar" @submit.prevent="search">
       <NInput v-model:value="filter" placeholder="搜索名称、标签或负责人" :input-props="{ 'aria-label': '搜索题目' }" class="search-field" clearable><template #prefix><AppIcon name="search" :size="16" /></template></NInput>
       <NButton attr-type="submit" :loading="loading">搜索</NButton>
-      <NCheckbox v-model:checked="archived">包含已归档</NCheckbox>
+      <NCheckbox :checked="archived" @update:checked="toggleArchived">包含已归档</NCheckbox>
       <span class="list-count">本页 <strong>{{problems.length}}</strong> 道题目</span>
     </form>
     <NEmpty v-if="loading" description="加载题目…" class="empty" />
     <table v-else-if="problems.length" class="data-table">
-      <thead><tr><th>题目名称</th><th>标签 / 负责人</th><th>文稿</th><th>最近更新</th><th></th></tr></thead>
-      <tbody><tr v-for="p in problems" :key="p.id"><td><RouterLink :to="'/problems/'+p.id" class="problem-title">{{p.title}}</RouterLink> <NTag v-if="p.archived" size="small">已归档</NTag><small>{{p.id}}</small></td><td><NTag v-for="tag in p.tags" :key="tag" size="small">{{tag}}</NTag><small>{{person(p.responsibleId)}}</small></td><td>{{p._count.documents}} 份独立文稿</td><td>{{new Date(p.updatedAt).toLocaleString('zh-CN')}}</td><td><NButton size="small" @click="router.push('/problems/'+p.id)">打开工作区<template #icon><AppIcon name="arrow" :size="15" /></template></NButton></td></tr></tbody>
+      <thead><tr><th>题目名称</th><th>创建者</th><th>标签 / 负责人</th><th>文稿</th><th>最近更新</th><th></th></tr></thead>
+      <tbody><tr v-for="p in problems" :key="p.id"><td><RouterLink :to="'/problems/'+p.id" class="problem-title">{{p.title}}</RouterLink> <NTag v-if="p.archived" size="small">已归档</NTag><small>{{p.id}}</small></td><td>{{p.creator?.name || '未知'}}</td><td><NTag v-for="tag in p.tags" :key="tag" size="small">{{tag}}</NTag><small>{{person(p.responsibleId)}}</small></td><td>{{p._count.documents}} 份独立文稿</td><td>{{new Date(p.updatedAt).toLocaleString('zh-CN')}}</td><td><NButton size="small" @click="router.push('/problems/'+p.id)">打开工作区<template #icon><AppIcon name="arrow" :size="15" /></template></NButton></td></tr></tbody>
     </table>
     <div v-else-if="!error" class="empty-state">
       <div class="empty-illustration"><AppIcon :name="value('q') || value('archived') ? 'search' : 'problems'" :size="32" /></div>

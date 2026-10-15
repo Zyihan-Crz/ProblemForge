@@ -44,6 +44,17 @@ export async function historyRoutes(app: Api) {
     const where: Prisma.ProblemWhereInput = { AND: [memberWhere(req.user), page.where(), ...(filters.archived === 'true' ? [] : [{ archived: false }]), ...(q ? [{ OR: [{ title: { contains: q, mode: 'insensitive' as const } }, { id: { in: tags.map(p => p.id) } }, { responsibleId: { in: responsible.map(u => u.id) } }] }] : [])] };
     const rows = await db.problem.findMany({ where, select: { id: true, title: true, tags: true, responsibleId: true, archived: true, updatedAt: true, createdAt: true, _count: { select: { documents: true } } }, orderBy: [...pageOrder], take: page.limit+1 });
     const hasMore = rows.length > page.limit; if (hasMore) rows.pop();
-    return { rows, currentCursor: page.currentCursor, nextCursor: hasMore ? page.next(rows.at(-1)!) : null, asOf: page.asOf };
+    // Creation provenance stays fixed when ownership or the responsible author changes.
+    // Only read creation records for this already-authorized page; expose names, not audit details.
+    const creationEvents = rows.length ? await db.auditLog.findMany({
+      where: { resourceId: { in: rows.map(row => row.id) }, action: { in: ['CREATE_PROBLEM', 'COPY_PROBLEM', 'IMPORT_PRIVATE_PROBLEM'] } },
+      select: { resourceId: true, actorId: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    }) : [];
+    const creatorsByProblem = new Map<string, string | null>();
+    for (const event of creationEvents) if (event.resourceId && !creatorsByProblem.has(event.resourceId)) creatorsByProblem.set(event.resourceId, event.actorId);
+    const creatorIds = [...new Set([...creatorsByProblem.values()].filter((id): id is string => id !== null))];
+    const creators = creatorIds.length ? await db.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } }) : [];
+    const creatorsById = new Map(creators.map(user => [user.id, user]));
+    return { rows: rows.map(row => ({ ...row, creator: creatorsById.get(creatorsByProblem.get(row.id) ?? '') ?? null })), currentCursor: page.currentCursor, nextCursor: hasMore ? page.next(rows.at(-1)!) : null, asOf: page.asOf };
   });
 }
