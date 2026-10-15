@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { defaultJudgeSettings, type JudgeSettingsValue, type DocumentKind, type AdminStyle } from '@problemforge/contracts';
 import { SAMPLE_LAYOUT_PREAMBLE, renderSamplePairs } from './samples.ts';
 
-export const POLICY_VERSION = 'pf-content-5';
+export const POLICY_VERSION = 'pf-content-6';
 export const TEX_PROFILE = 'xelatex-2022-bookworm-v1';
 export const SAMPLE_RENDERER_VERSION = 'pf-samples-6';
 export type TemplateFiles = Record<string, string>;
@@ -34,7 +34,7 @@ const commonMacros = new Set((
   'sum prod int iint lim min max log ln exp sin cos tan gcd lcm mod bmod pmod cfrac ' +
   'in notin subset subseteq supset supseteq cup cap emptyset forall exists neg land lor ' +
   'le leq ge geq ne neq equiv approx sim simeq cong propto ' +
-  'times cdot div pm mp circ ' +
+  'times cdot div pm mp circ oplus ' +
   'alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta iota kappa lambda mu nu xi ' +
   'pi varpi rho varrho sigma varsigma tau upsilon phi varphi chi psi omega ' +
   'Gamma Delta Theta Lambda Xi Pi Sigma Upsilon Phi Psi Omega ' +

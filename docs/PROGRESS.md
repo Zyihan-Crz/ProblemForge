@@ -991,3 +991,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 Linux 完整入口夹具实际运行 Bash update、自动加载 env.sh、Git 打包与文件备份；Docker/PM2/Caddy/数据库/HTTP 命令均模拟且不监听。验证端口冲突早于打包退出、构建失败保留原站、再次 update 复用已准备应用与 TeX、备份文件内容/权限/哈希、备份先于迁移、正确提交激活、重复调用不重新部署、源码变新时 pending 仍完成原包、私有配置与既有 Caddy 文本保留。证据 `.local/caddy-pm2/update-evidence/update-check.json`，夹具源码在同目录 verify-update.mjs / update-commands.mjs。部署指南全部 16 个 Bash 块、1 个 PowerShell 块及 deploy.sh 语法检查通过；未执行文档中的 push/SSH 命令。
 
 **环境、未验证与收尾：**主目录原 5180/3100 仍为 Vite 32304 / API 88612，命令行加载 `D:\project\ProblemForge`。没有重启开发服务、修改原数据库/模板/存储、开放新端口或启动部署演练实例；仅无监听的 Docker 构建及模拟外部依赖的验证。目标服务器的本次升级、真实备份/迁移、HTTPS 和题目功能验收仍待用户执行，不将夹具计作生产部署成功。未登录云主机、操作其他项目或发布公网。README/部署指南/PLAN 同步，完成差异检查后本地提交，不 push。
+
+## 数学符号 `\oplus` 内容策略兼容（2026-10-15）
+
+**实现：**用户反馈构建前第 6 行 `\oplus` 不在批准语法中，并要求随后更新云端。定位为共用数学命令白名单遗漏，已将 `\oplus` 加入题面、文档题解、Beamer 共用规则；策略版本升为 `pf-content-6`，新单题/比赛构建快照与缓存哈希使用新版本。公式内容、已有发布模板和历史产物不改写，危险宏定义、展开和文件访问仍由原 AST 规则拒绝。TEMPLATES 与 PLAN 已同步。
+
+**实际验证：**`pnpm test:quick template` 的 9 项检查和模板引擎 `tsc` 通过。新增案例覆盖从第 6 行开始的 `a \oplus b`、异或示例、下标/括号和独立公式，三种文稿均通过校验且渲染保留正文；邻接分组中的 input、write18、def、csname 仍报告第 6 行危险命令。未执行真实 TeX/Judge、全量/E2E、生产构建或浏览器操作。本轮编写独立公式夹具时另发现既有 `align*` 环境会报 `[object Object]`，该问题独立于 `\oplus` 白名单，记录待后续处理；本次覆盖行内和 `$$...$$` 公式，没有放开其他环境。
+
+**原环境与交付：**先确认原 5180/3100 来自主目录、活动构建/判题均为 0，保存题目、文稿和模板指纹，再仅重启原 pnpm dev 进程树。当前根 99216、Vite 85872、API 78872、Worker 88416/96096，仍使用原端口、数据库、存储和模板；首页 200、API 健康 ok、stderr 为空，前后业务/模板指纹一致，活动任务仍为 0。证据 `.local/oplus/before.json`、after.json、services-verified.json。只读检查和服务重载未创建题目、文稿或构建记录。完成差异检查后本地提交，不 push；用户按现有本机推送、服务器 `git pull --ff-only origin master && bash deploy.sh update` 更新后重新构建 PDF。本轮没有远程执行，目标服务器部署和 PDF 结果待用户验证。

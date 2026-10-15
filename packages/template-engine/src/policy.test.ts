@@ -45,6 +45,24 @@ test('annotated right arrows accept math labels while checking both labels for f
     }
   }
 });
+
+test('circled plus renders in each manuscript kind while nested forbidden commands remain rejected', async () => {
+  const body = '\n'.repeat(5) + String.raw`异或运算为 $a \oplus b$，例如 $1 \oplus 1 = 0$。
+$$c = (a_1 \oplus a_2) \oplus a_3$$`;
+  for (const [folder, kind] of [['statement', 'STATEMENT'], ['editorial-document', 'EDITORIAL_DOCUMENT'], ['editorial-beamer', 'EDITORIAL_BEAMER']] as const) {
+    assert.deepEqual(validateBody(body, kind), []);
+    const files = await loadTemplateDirectory(fileURLToPath(new URL(`../../../templates/builtin/${folder}/`, import.meta.url)));
+    assert.equal(render(files, kind, body, { title: '异或运算', author: '' })['content.tex'], body);
+    for (const forbidden of [String.raw`\input{secret.tex}`, String.raw`\write18{command}`, String.raw`\def\f{1}`, String.raw`\csname input\endcsname`]) {
+      assert.throws(() => validateBody('\n'.repeat(5) + String.raw`$a \oplus {${forbidden}}$`, kind), (error: unknown) => {
+        assert.ok(error instanceof ContentPolicyError);
+        assert.ok(error.issues.some(issue => issue.line === 6 && issue.message.includes(forbidden.match(/^\\[a-z]+/)![0])));
+        assert.ok(error.issues.every(issue => !issue.message.includes('\\oplus')));
+        return true;
+      });
+    }
+  }
+});
 test('images resolve only approved immutable assets and bounded local dimensions', () => {
   const path = 'assets/cimage123.png';
   assert.deepEqual(validateBody(`\\includegraphics[width=0.8\\linewidth]{${path}}`, 'STATEMENT', [path]), [path]);
