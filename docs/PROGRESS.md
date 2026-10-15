@@ -968,3 +968,13 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **交付：**部署指南明确区分 `/root/ProblemForge` 源码与 `/opt/problemforge/current` 线上固定版本。补强 D 的托管标记、root、current、锁/pending、包含 5142c4e 修复的提交检查，执行前读取监听归属并用新源码检查 Caddy 和原站健康。向用户直接交付配置备份、固定 Git SHA 打包、执行包内 deploy.sh、部署后 status/last-deploy 提交比对及浏览器验收命令；无需为了本轮文档再推送或拉取。题面变化需重新构建 PDF，历史 PDF 不变。
 
 **实际验证与边界：**沿用并逐行核对现有 package-cloud / deploy.sh / cloud-deploy 的打包、备份、切换和健康检查行为；文档及本轮组合命令仅进行 Bash 语法检查，没有连接服务器或执行部署。未修改应用代码、依赖、数据库或开发服务，不重跑应用测试或 TeX/Judge。目标主机实际部署、版本核对与网页结果仍待用户执行；本轮只本地提交指引和交接，不 push。
+
+## 云端发布目录在私有 umask 下不可读取（2026-10-15）
+
+**用户日志与定位：**用户实际部署 git-5142c4e6bd9e92bf672d84527076c7bba0806ca1 后，runuser 预加载该目录的绝对 tsx/dist/loader.mjs 报 ERR_MODULE_NOT_FOUND，Node 22.23.3；调用处在 prepare 末尾，早于沙箱构建、停止本站和迁移，说明本次已越过 Caddy 预检。核对发现本轮指引采用 umask 077，而旧 prepare 将发布目录从服务用户转交 root 后，只设置 g-w,o-rwx，没有补组读取/遍历权限。Linux 实际复现 root 可读 loader、服务用户同样报模块不存在。目标服务器的权限和文件存在性尚待恢复命令核对，不能仅据该异常断言依赖文件真的丢失。
+
+**实现与恢复交付：**集中 sealRelease，设置 root:problemforge 属主/组和 g+rX,g-w,o-rwx；新目录、已 prepared 重试均执行，实际服务账号从守护进程父目录预加载通过后才记录新 ready 标记。将真实目录/符号链接检查前移，覆盖 prepared 重试，避免递归权限修改跟随非托管目标。保留服务组不可写、其他用户不可访问和完整源码哈希验证，不改依赖版本。指南提供仅针对该次固定包的恢复：核对路径/owner/root 可读文件、获取本站独占部署锁、拒绝 pending/已激活目录、核验原包、只补目录权限、服务账号实际预加载，释放锁后重试原包并核对已部署 SHA。当前原包无需重新打包或篡改源码清单；永久修复留待用户正常推送交付。
+
+**实际验证：**Node 语法及 15 项部署检查通过，其中新增准备阶段失败不停止旧应用/不迁移断言。独立 Linux Docker 构建 network=none，调用从实际部署代码提取的 sealRelease，复现 umask 077 旧逻辑失败，并验证 077/027/022 的 loader、真实 TypeScript、prepared 权限重试、字节哈希保持、目录 0750/普通文件 0640/原可执行文件 0750、服务用户不可写；生产 prepare 对已 prepared 的符号链接在变更前拒绝。证据 `.local/caddy-pm2/release-permissions-evidence/release-permissions-check.json`。没有 HTTP 监听、应用数据库或作者程序/TeX 执行。指南 21 个 Bash 块、恢复用 Node heredoc 和原 PowerShell 块均通过语法检查；未执行云端恢复块。
+
+**边界与收尾：**本机原 5180/3100 进程仍为 Vite 32304 / API 88612，命令行来自主目录，未重启原服务、修改业务数据库、存储或模板。未登录云主机、修改其他项目或发布公网；用户服务器权限核对、同版本重试和网站验收仍待执行。PLAN/部署指南已同步，差异检查通过后本地提交，不 push。

@@ -148,8 +148,11 @@ test('deployment only activates public proxy and records success after health ch
   const fresh = await scenario(undefined, false);
   assert.ok(!fresh.includes('backup') && !fresh.includes('quiesce'));
 });
-test('a build failure leaves old processes running, a backup failure resumes them without migrating', async () => {
-  const build = await scenario('buildSandboxes'); assert.ok(!build.includes('quiesce') && !build.includes('resumePrevious'));
+test('preparation/build failures leave old processes running, a backup failure resumes them without migrating', async () => {
+  for (const failure of ['prepare', 'buildSandboxes']) {
+    const build = await scenario(failure);
+    assert.ok(!build.includes('quiesce') && !build.includes('resumePrevious') && !build.includes('stopApplication') && !build.includes('migrate'));
+  }
   const backup = await scenario('backup'); assert.ok(backup.includes('resumePrevious') && !backup.includes('migrate'));
 });
 test('unreachable host dependencies fail before migration and before stopping a fresh application', async () => {

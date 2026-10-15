@@ -201,15 +201,23 @@ async function provision(settingsInput, secretsPath) {
   for (const bin of [bins.pnpm, bins.pm2]) await run('runuser', ['-u', user, '--', 'test', '-r', bin]);
   await writeOwned(`${shared}/binaries.json`, JSON.stringify(bins, null, 2));
 }
+async function sealRelease(release) {
+  await run('chown', ['-R', `root:${user}`, release]);
+  // A private umask may have created 0600 files and 0700 directories. The
+  // service group must be able to read/traverse them after root takes ownership.
+  await run('chmod', ['-R', 'g+rX,g-w,o-rwx', release]);
+  await asApp(bins.node, ['--import', `${release}/node_modules/tsx/dist/loader.mjs`, '--eval', ''], { cwd: root, timeout: 10000 });
+}
 async function prepare(manifest) {
   const release = `${root}/releases/${manifest.buildId}`;
   if (!appPath(release)) throw new Error('无效版本目录');
+  if (await exists(release) && ((await lstat(release)).isSymbolicLink() || await realpath(release) !== release)) throw new Error('版本目录不能为符号链接');
   if (await exists(`${release}/.prepared`)) {
     if (digest(await readFile(`${release}/cloud-release.json`)) !== digest(await readFile(`${source}/cloud-release.json`))) throw new Error('已存在同名不同内容的版本');
     await verifyRelease(release);
+    await sealRelease(release);
     return release;
   }
-  if (await exists(release) && (await lstat(release)).isSymbolicLink()) throw new Error('版本目录不能为符号链接');
   await mkdir(release, { recursive: true, mode: 0o750 });
   for (const file of [...manifest.files, { path: 'cloud-release.json' }]) {
     const destination = resolve(release, file.path);
@@ -221,8 +229,7 @@ async function prepare(manifest) {
   await asApp(bins.node, ['--import', 'tsx', 'scripts/database.ts', 'generate'], { cwd: release,
     env: { DATABASE_URL: 'postgresql://build:build@127.0.0.1/build' } });
   await asApp(bins.node, [bins.pnpm, 'build:web'], { cwd: release });
-  await run('chown', ['-R', `root:${user}`, release]);
-  await run('chmod', ['-R', 'g-w,o-rwx', release]);
+  await sealRelease(release);
   await writeOwned(`${release}/.prepared`, 'ready\n');
   return release;
 }
@@ -337,9 +344,6 @@ async function main() {
     await deployWorkflow({
       prepare: async () => {
         release = await prepare(manifest);
-        // Use the daemon's parent directory and actual service UID, without
-        // loading the application or opening any connection/listener.
-        await asApp(bins.node, ['--import', `${release}/node_modules/tsx/dist/loader.mjs`, '--eval', ''], { cwd: root, timeout: 10000 });
       },
       buildSandboxes: async () => {
         if (recoveringNetwork) {

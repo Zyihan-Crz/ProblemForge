@@ -284,6 +284,68 @@ node scripts/cloud-deploy.mjs status
 
 仍有 pending 时，在云服务器执行上面的 `git pull --ff-only` 与 `node scripts/cloud-deploy.mjs resume-network` 整段命令即可；保留当前应用版本、镜像和数据库，只重新生成本站 PM2 启动配置并继续部署。该命令始终限定 problemforge 用户及 `/opt/problemforge/shared/pm2`，不会调用 root 的 `/root/.pm2` 去停止或升级既有服务。用户当前 root PM2 v6.0.14 与本站 PM2 v7.0.4 分别运行，看到不同进程列表是预期行为。
 
+### 绝对路径的 tsx/dist/loader.mjs 仍报模块不存在
+
+2026-10-15 用户部署 `git-5142c4e6bd9e92bf672d84527076c7bba0806ca1` 时，在 prepare 的服务账号预加载检查报上述错误。此处在沙箱构建、停止原应用和迁移之前；该次命令尚未开始切换站点。不要与上一小节的裸包名解析问题混淆。
+
+已在 Linux 复现本轮指引的 `umask 077` 和旧部署器权限处理组合：发布目录可能是 0700，文件是 0600；旧代码改属主为 root 后，仅撤去组写入和其他用户权限，没有授予 problemforge 组读取/目录访问权限，导致 root 能读取实际存在的 loader，而服务账号报 ERR_MODULE_NOT_FOUND。新版在新目录和 `.prepared` 重试两条路径都明确设置 `g+rX,g-w,o-rwx`，并在写入 ready 标记前以实际服务用户预加载。`X` 仅给目录或原本可执行的文件增加执行/访问权限，见 [GNU chmod 说明](https://www.gnu.org/software/coreutils/manual/html_node/Conditional-Executability.html)。
+
+下列命令专用于用户此次尚未激活的固定版本。先确认托管标记、真实目录、root 可读 loader、目录属组和包哈希；获得本项目部署锁后再次检查 current/pending，仅修正该目录权限，然后释放锁并重试原包。原包源码、清单和依赖字节不变，不需为此次恢复先推送新代码。若文件真的缺失、目录归属异常、已有 pending/锁或该版本已经激活，命令停止，应提供检查输出再判断，不套用权限修复。
+
+```bash
+(
+set -euo pipefail
+umask 077
+. /opt/problemforge-tools/env.sh
+test "$(id -u)" = 0
+cd /opt/problemforge
+test -f .problemforge-managed
+pf_release=/opt/problemforge/releases/git-5142c4e6bd9e92bf672d84527076c7bba0806ca1
+pf_loader="$pf_release/node_modules/tsx/dist/loader.mjs"
+pf_node="$(readlink -f "$(command -v node)")"
+test "$(readlink -f "$pf_release")" = "$pf_release"
+test -f "$pf_release/.prepared"
+namei -l "$pf_loader"
+test -r "$pf_loader"
+test "$(stat -c '%U:%G' "$pf_release")" = root:problemforge
+
+pf_lock=/opt/problemforge/.deploy.lock
+pf_lock_pid=$BASHPID
+( set -o noclobber; printf '%s\n' "$pf_lock_pid" > "$pf_lock" )
+trap 'rm -f -- "$pf_lock"' EXIT
+test ! -e /opt/problemforge/shared/pending-deploy.json
+test -L /opt/problemforge/current
+test "$(readlink -f /opt/problemforge/current)" != "$pf_release"
+ss -lntp '( sport = :80 or sport = :443 or sport = :2019 or sport = :5181 or sport = :25432 or sport = :26379 or sport = :25050 or sport = :25051 )'
+
+node --input-type=module - "$pf_release" <<'NODE'
+import { pathToFileURL } from 'node:url';
+const directory = process.argv[2];
+const { verifyRelease } = await import(pathToFileURL(`${directory}/scripts/cloud-config.mjs`).href);
+const manifest = await verifyRelease(directory);
+const expected = '5142c4e6bd9e92bf672d84527076c7bba0806ca1';
+if (manifest.gitCommit !== expected || manifest.buildId !== `git-${expected}`) throw new Error('不是本次失败的原发布包');
+console.log('原发布包内容校验通过。');
+NODE
+
+chmod -R g+rX,g-w,o-rwx "$pf_release"
+runuser -u problemforge -- env -i HOME=/opt/problemforge/shared/home LANG=C.UTF-8 \
+  PATH="$(dirname "$pf_node"):/usr/local/bin:/usr/bin:/bin" \
+  "$pf_node" --import "$pf_loader" --eval ''
+printf '%s\n' '服务账号依赖加载通过，继续部署原版本。'
+rm -- "$pf_lock"
+trap - EXIT
+
+bash "$pf_release/deploy.sh"
+bash /opt/problemforge/current/deploy.sh status
+test "$(node -p 'JSON.parse(require("node:fs").readFileSync("/opt/problemforge/shared/last-deploy.json", "utf8")).gitCommit')" = 5142c4e6bd9e92bf672d84527076c7bba0806ca1
+test ! -e /opt/problemforge/shared/pending-deploy.json
+printf '%s\n' '新版部署完成，版本一致，健康检查通过。'
+)
+```
+
+部署结束后强制刷新网页，并重新构建需要查看新排版的 PDF。新版部署器的永久修正已在本地代码中；下一次更新可随源码正常交付。上述手动恢复只解决本次已准备目录，不代替未来版本的代码修正。
+
 ## 6. 查看管理员账号并检查网站
 
 ```bash
