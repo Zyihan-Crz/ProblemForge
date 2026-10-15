@@ -928,3 +928,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **实际验证：**`pnpm check template-engine api tex-worker` 通过；显式运行 policy.test.ts、contest.test.ts、statement-settings.test.ts 共 11 项通过，覆盖两套新模板、旧带空白插槽、旧字面标准题头、单题/单题册、比赛、自定义文件名转义及输入模板不变。原独立 Linux TeX 沙箱编译原库已发布「CWNU 挑战赛比赛题面 v2」单题，以及简洁模板含两个题目的比赛题册（旧带空白 item 夹具），得到 1 页与 3 页 PDF，均 Accepted、退出码 0、无 Overfull。Poppler 渲染并目视检查全部 4 页；标准 I/O、自定义 data_in.txt / data_out.txt 的四行值均左对齐，双样例仍共用表头。文本坐标对照上轮已有 PDF，旧偏差为 5.732428 pt，现单题最大 0.004428 pt、比赛两题均 0.002 pt，均小于 0.01 pt。原文件名内容保留。证据 `.local/header-alignment/verification.json`、alignment.json、PDF/PNG 与日志；沙箱临时文件已清理，未创建业务构建记录。
 
 **环境与收尾：**先核对主目录原服务根 89628、5180/3100 的归属和零活动任务，再仅重启同一 pnpm dev；收尾根 46076、Vite 32304、API 88612、两个 Worker 52220/80352，归属一致且无额外 Worker。首页 200、API 健康 ok、stderr 为空；原题目、文稿/修订、全部模板版本指纹前后一致，活动 Build/TestRun 均为 0，见 before/after、services-verified、final-check.json。继续使用原库、存储、模板与 Linux 沙箱，无新实例/端口、依赖或迁移。未运行真实业务队列构建、浏览器点击、Judge、全量/E2E 或云端部署；用户在原 5180 重新「构建 PDF」即可查看修正。TEMPLATES 与 PLAN 已同步，无阻塞，差异检查后本地 Git 提交，不 push。
+
+## 原云站点升级全流程交付（2026-10-15）
+
+**用户确认与准备：**用户要求部署全流程，并确认是更新已有站点、原服务器方案不变，继续按 Ubuntu / PM2 / `/root/.hydro/Caddyfile` 和 `problems.cwnupaa.com` 准备。只读 `git ls-remote origin refs/heads/master` 返回 e8db0e7b52a414729e0b6e633754758a8ad0fb53；核对时本地功能提交为 3bee810c983668c1ed1c4c379a65517a4613a814，四项修复尚未上传。因此指引先由用户在本机推送已提交内容，再在服务器 pull；本轮不代为推送或登录服务器。四项修复差异没有新增数据库迁移，不将本机题库作为部署输入。
+
+**交付内容：**在 DEPLOY_HYDRO_CADDY 增加独立升级章节 A—E：本机工作区/推送校验、云端托管标记/端口归属/当前健康/锁和 pending 检查、干净 master 快进拉取及包含修复提交校验、Caddy 文件与运行配置核对、私有配置及原 current 备份、按完整 Git SHA 生成不可变包并调用其中 deploy.sh。已有实例不再传首次 secrets/settings，保留服务器实际配置。明确部署器自动静止写入并备份 database.dump / storage.tar / state.json / manifest.json 后才迁移切换；收尾核对 last-deploy.gitCommit、完整健康、无 pending，并要求浏览器验收四项修复与小型判题。补充同版本失败恢复、日志路径及无生产库一键回滚的现有限制，不提供绕开 pending、全局 PM2 重启、删除数据卷或直接回指旧版本的操作。
+
+**实际验证与边界：**逐段核对 cloud-deploy / cloud-workflow / cloud-config / package-cloud / cloud-database 的实际行为；全部 17 个 Bash 代码块经 Git Bash `-n`、1 个 PowerShell 块经语法树解析通过，均未执行代码块内容。证据 `.local/deploy-guide/syntax.json` 与 powershell-syntax.json，命令中推送、服务器读写及部署都没有运行。文档差异检查通过，未改应用代码、依赖、数据库或原开发服务；不重跑功能测试、TeX/Judge 或全量检查。目标服务器当前状态、备份、升级与业务验收等待用户执行，已有站点由用户确认，不冒充远程实测；无文档交付阻塞，更新 PLAN 后本地提交，不 push。
