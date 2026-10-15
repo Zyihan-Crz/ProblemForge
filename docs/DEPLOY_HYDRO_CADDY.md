@@ -198,7 +198,7 @@ readlink -f "$pf_caddy_cli"
 
 ss -lntp '( sport = :80 or sport = :443 or sport = :2019 )'
 ps -eo pid,comm,args | grep '[c]addy'
-for pf_pid in $(pgrep -x caddy || true); do
+for pf_pid in $(pgrep -x 'caddy|caddy-l4' || true); do
   printf '\n运行中的 Caddy PID=%s\n' "$pf_pid"
   readlink "/proc/$pf_pid/exe"
   "/proc/$pf_pid/exe" version
@@ -208,6 +208,46 @@ done
 ```
 
 保留并提供完整输出。若正在运行的程序包含该模块而 PATH 程序不包含，后续应让本项目部署命令使用已核实的现有程序；若二者均缺失或找不到运行进程，需要继续核对配置来源和实际监听者，不能猜测正确路径。进程枚举没有结果也要保留前面的 ps/ss 输出。不要通过删除现有 layer4 配置、直接下载替换全局 Caddy 或升级模块来绕过检查；这些会改变共用服务器上的其他服务。当前错误在 Caddy 适配/预检处产生，本次命令尚未进入部署器的应用停机和数据库迁移阶段；不据此推断此前命令或服务器其他任务的状态。
+
+2026-10-15 用户回传确认：80/443/2019 均由 PID 1380 的 `caddy-l4` 监听，启动命令为 `/usr/local/bin/caddy-l4 run --config /root/.hydro/Caddyfile --adapter caddyfile`，而 PATH 的 caddy 指向无 layer4 模块的 Nix 2.10.2。这时可为 ProblemForge 专用工具目录设置 caddy 入口，兼容现有已部署版本，不需要改已发布应用源码或全局 Caddy。以下命令先核对监听和实际模块，只创建本项目的符号链接并备份/补充本项目 env.sh；不会修改 Caddyfile、替换 `/usr/local/bin/caddy-l4` 或重启原 Caddy。
+
+```bash
+(
+set -euo pipefail
+test "$(id -u)" = 0
+test -d /opt/problemforge-tools
+test ! -L /opt/problemforge-tools
+test -f /opt/problemforge-tools/env.sh
+test ! -L /opt/problemforge-tools/env.sh
+test -x /usr/local/bin/caddy-l4
+
+ss -lntp '( sport = :80 or sport = :443 or sport = :2019 )'
+/usr/local/bin/caddy-l4 list-modules | grep -Fx 'caddy.listeners.layer4'
+
+test ! -L /opt/problemforge-tools/bin
+install -d -m 755 /opt/problemforge-tools/bin
+if [ -e /opt/problemforge-tools/bin/caddy ] || [ -L /opt/problemforge-tools/bin/caddy ]; then
+  test "$(readlink -f /opt/problemforge-tools/bin/caddy)" = "$(readlink -f /usr/local/bin/caddy-l4)"
+else
+  ln -s /usr/local/bin/caddy-l4 /opt/problemforge-tools/bin/caddy
+fi
+
+pf_path_line='export PATH="/opt/problemforge-tools/bin:$PATH"'
+if ! grep -Fxq "$pf_path_line" /opt/problemforge-tools/env.sh; then
+  cp -a /opt/problemforge-tools/env.sh "/opt/problemforge-tools/env.sh.before-caddy-l4-$(date +%Y%m%d-%H%M%S)"
+  printf '\n%s\n' "$pf_path_line" >> /opt/problemforge-tools/env.sh
+fi
+
+. /opt/problemforge-tools/env.sh
+pf_selected_caddy="$(sh -c 'command -v caddy')"
+readlink -f "$pf_selected_caddy"
+test "$(readlink -f "$pf_selected_caddy")" = "$(readlink -f /usr/local/bin/caddy-l4)"
+node /opt/problemforge/current/scripts/cloud-deploy.mjs check-caddy
+bash /opt/problemforge/current/deploy.sh status
+)
+```
+
+模块检查应打印 `caddy.listeners.layer4`，选中的真实路径应与 `/usr/local/bin/caddy-l4` 的真实路径一致，随后 Caddy 配置匹配和原站状态检查应通过。发现专用入口已有不同目标时命令会停止，不覆盖。路径补充保存在 env.sh，括号子 shell 退出或重新登录后，原升级步骤中的 `. /opt/problemforge-tools/env.sh` 仍会选择正确程序。完成后继续下文 C（拉取代码）、D（备份部署）、E（验收）；任一步报错先处理该错误。此处成功仅表示原站预检通过，不表示新版应用已部署。
 
 ### API 启动报 Cannot find package 'tsx'
 

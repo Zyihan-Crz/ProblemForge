@@ -944,3 +944,11 @@ LaTeX AST 转为 sections / samples / hint，保留 Markdown、公式、固定�
 **已完成与待确认：**核对 Caddy 官方 list-modules 说明，在 DEPLOY_HYDRO_CADDY 加入只读对照命令：PATH 与符号链接路径、CLI 版本/模块、80/443/2019 监听归属、Caddy 进程和 `/proc/<pid>/exe` 对应程序的版本/模块。不打印私有环境或完整配置，不改 Caddyfile、安装插件、替换全局程序、重载或停止现有服务。正确程序路径、模块列表及配置与运行状态需用户在原服务器返回后确定，暂不按猜测改部署器或重试升级。
 
 **验证与环境：**文档 18 个 Bash 块均通过 Git Bash `-n`，诊断命令没有在本机或云端执行；文档差异检查通过。主目录原 5180/3100 仍为 Vite 32304 / API 88612，命令行确认均加载 D:\project\ProblemForge，未重启或修改原开发环境。仅本地提交文档和交接，不 push；未访问云主机、其他项目配置或业务数据，未运行功能测试/TeX/Judge。当前外部信息缺口是服务器实际运行程序，待用户返回诊断输出后继续。
+
+## 原站 caddy-l4 与部署命令入口对齐（2026-10-15）
+
+**用户证据：**用户回传 CLI 的 `/root/.nix-profile/bin/caddy` 实际为 Nix Caddy 2.10.2，模块过滤无输出；监听列表确认 127.0.0.1:2019 与 *:80 / *:443 属于 PID 1380 的 caddy-l4，启动命令 `/usr/local/bin/caddy-l4 run --config /root/.hydro/Caddyfile --adapter caddyfile`。已经确认所选 CLI 与原站程序不同。上一轮 pgrep 仅精确匹配 caddy，未进入 caddy-l4 模块检查循环，现诊断文档同时匹配两者；不把进程名称本身当作模块已验证的证据。
+
+**修正流程：**现有 cloud-deploy 从继承 PATH 查 caddy 并 realpath，因此无需修改不可变旧应用或先升级代码。交付先读取监听、验证 `/usr/local/bin/caddy-l4` 确含目标模块，再在 `/opt/problemforge-tools/bin/caddy` 创建到它的符号链接；已存在不同目标或异常符号链接目录即停止。仅备份并给项目专用 env.sh 追加该目录的 PATH 行，保证退出子 shell/重新登录后，原升级流程 source env.sh 仍有效。加载后核对最终路径，通过旧版 check-caddy 与 status 后再继续拉取、备份部署和验收。流程不替换全局 Caddy、不改 Caddyfile、不安装插件或重启原 Caddy。
+
+**验证和待办：**文档 19 个 Bash 块通过 Git Bash `-n`、差异检查通过；核对现有部署器 cleanEnv / findBinary 继承规则，确认项目入口方式兼容旧版。没有执行服务器修正命令或代为宣布升级完成，实际模块、配置匹配和网站升级验收仍待用户执行。原主目录监听仍为 5180 Vite 32304 / 3100 API 88612，均加载主目录，未重启或改业务数据。只改文档及 PLAN/交接，本地提交，不 push；未运行应用测试、TeX/Judge 或新增服务实例。
