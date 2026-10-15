@@ -5,6 +5,7 @@ import { Executor, type Compiled } from '../workers/judge/src/executor.ts';
 import { readTestArchive, ArchiveError } from '../packages/judge-core/src/archive.ts';
 import { makeTestZip } from '../fixtures/judge/zip.ts';
 import type { SandboxCommand } from '../packages/judge-adapter/src/index.ts';
+import { blankManifest, digest, nativeExporter, importNative, readArchive, writeArchive, validateManifest } from '@problemforge/problem-format';
 
 test('generator commands allow large input while solution and diagnostic limits stay independent', async () => {
   const executor = new Executor('fixture', null as any, null as any, new AbortController().signal, '', { problemId: 'fixture', leaseToken: 'fixture' });
@@ -34,4 +35,20 @@ test('ZIP imports preserve a 200000-number input larger than 1 MiB', async () =>
   const oversized = makeTestZip([{ name: '4.in', bytes: Buffer.from('x') }]);
   oversized.writeUInt32LE(MAX_TEST_BYTES + 1, oversized.indexOf(Buffer.from('504b0102', 'hex')) + 24);
   await assert.rejects(readTestArchive(oversized), ArchiveError);
+});
+
+test('data above the old 8 MB limit survives test ZIP and native package round trips', async () => {
+  const bytes = Buffer.alloc(8_000_001);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
+  const hash = digest(bytes);
+  const imported = await readTestArchive(makeTestZip([{ name: '1.in', bytes }]));
+  assert.equal(digest(imported[0].input), hash);
+  const manifest = blankManifest('large input');
+  manifest.tests.push({ id: 't1', revisionId: 'r1', version: 1, number: 1, groupName: 'main', isSample: false, enabled: true, notes: '', provenance: null, input: { key: 'large.bin', bytes: bytes.length, hash }, answer: null });
+  const exported = await nativeExporter.export(manifest, 'FULL', async () => bytes);
+  const restored = importNative(await readArchive(await writeArchive(exported.files)));
+  assert.equal(restored.manifest.tests[0].input.hash, hash);
+  assert.equal(restored.manifest.tests[0].input.bytes, bytes.length);
+  manifest.tests[0].input.bytes = MAX_TEST_BYTES + 1;
+  assert.throws(() => validateManifest(manifest));
 });

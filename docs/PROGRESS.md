@@ -999,3 +999,15 @@ Linux 完整入口夹具实际运行 Bash update、自动加载 env.sh、Git 打
 **实际验证：**`pnpm test:quick template` 的 9 项检查和模板引擎 `tsc` 通过。新增案例覆盖从第 6 行开始的 `a \oplus b`、异或示例、下标/括号和独立公式，三种文稿均通过校验且渲染保留正文；邻接分组中的 input、write18、def、csname 仍报告第 6 行危险命令。未执行真实 TeX/Judge、全量/E2E、生产构建或浏览器操作。本轮编写独立公式夹具时另发现既有 `align*` 环境会报 `[object Object]`，该问题独立于 `\oplus` 白名单，记录待后续处理；本次覆盖行内和 `$$...$$` 公式，没有放开其他环境。
 
 **原环境与交付：**先确认原 5180/3100 来自主目录、活动构建/判题均为 0，保存题目、文稿和模板指纹，再仅重启原 pnpm dev 进程树。当前根 99216、Vite 85872、API 78872、Worker 88416/96096，仍使用原端口、数据库、存储和模板；首页 200、API 健康 ok、stderr 为空，前后业务/模板指纹一致，活动任务仍为 0。证据 `.local/oplus/before.json`、after.json、services-verified.json。只读检查和服务重载未创建题目、文稿或构建记录。完成差异检查后本地提交，不 push；用户按现有本机推送、服务器 `git pull --ff-only origin master && bash deploy.sh update` 更新后重新构建 PDF。本轮没有远程执行，目标服务器部署和 PDF 结果待用户验证。
+
+## 正常大数据触及生成器 8 MB 上限（2026-10-15）
+
+**原因与实现：**用户截图的生成答案任务在生成输入阶段报 GENERATOR_FAILED / OLE，stdout 为 8,000,001 字节；用户确认预期数据本来超过 8 MB，要求放宽平台限制。共用单文件常量改为 64,000,000 字节，覆盖生成器/确定性复跑/对拍、测试输入答案、上传/请求体、生成数据收集、反例及工具自测。测试 ZIP 和原生/其他格式题包同步改为压缩 128 MB、展开 256 MB、单成员 64 MB，原生清单字节校验和前端提示同步；保留成员数、路径、加密、链接和压缩比限制。ZIP 原始数据仅解码/计算来源哈希一次。生成策略由 v2 升为 v3，新任务固定新语义，历史任务不能用「重试原快照」静默放宽。生成计划显示每组 64 MB，OLE 日志说明 stdout/stderr 限制。
+
+**运行配置：**核对 go-judge v1.8.5 官方协议与配置，服务级 output-limit 是 POSIX 文件大小限制，原 8m 会在应用上限调整后继续拦截。三套 Compose 的 Judge output/copy-out 上限同步为 64m，实际每条生成命令仍严格限制 64,000,000 字节；/w 与默认临时工作区为 256m，可容纳 Checker 自测的三份最大文件。解法的 outputLimitBytes、stderr 64 KiB 和编译产物上限保留。本站 Caddy 托管块与 Nginx 示例的请求体上限改为 256 MiB，可容纳三份 64 MB 文件的 Base64 JSON；已有云站点通过原 update 流程更新托管块及 Judge 镜像/配置。
+
+**实际检查：**`pnpm check contracts judge-core problem-format api web judge-worker` 通过。生成器与去重 8 项、Judge 核心 3 项、部署/Caddy 与镜像 22 项，共 33 项定向测试通过，包括旧策略拒绝、超过旧 8 MB 的 ZIP/原生题包往返、字节哈希与越界拒绝、路径穿越拒绝，以及升级本站请求上限时保留其他站点文本。原 Linux Judge 镜像实际构建成功，APT 层命中缓存，仅工作目录配置层变化。
+
+显式 `verify-generator-output.ts --sandbox` 在原 Linux 沙箱中运行有界 Python 夹具，通过实际 Executor 请求/输出收集：8,000,001 字节生成及复跑 AC、64,000,000 字节 AC 且 SHA-256 一致、64,000,001 字节 OLE；4096 字节解法限制及 65536 字节 stderr 限制仍触发 OLE；Checker 同时读取三份各 64 MB 文件 AC。Invocation/Storage 为替身，不创建真实任务或业务文件，临时缓存已清理。`verify-large-test-data.ts --rollback` 通过真实 Fastify 路由、原数据库必定回滚事务，验证 64 MB 输入/答案创建更新、超一字节拒绝、三份最大自测文件创建更新、8 MB + 1 字节 ZIP 导入和 64 MB 生成数据收集；存储只记录哈希/长度，事务后确认夹具题目/用户/审计均不存在。证据均在 `.local/generator-limit/`：types/unit/judge-core/cloud 日志、sandbox-result.json、api-result.json、judge-build.log。
+
+**原环境与边界：**改动监听前只读确认原服务树、原 Judge Compose 归属、127.0.0.1:15051 的 Docker 监听及零活动任务，仅更新原 problemforge-judge-sandbox-1（当前 480e5e60bd29，原端口），其余容器未操作。随后只重启主目录原 pnpm dev，收尾根 83944、Vite 67544、API 4728、两个 Worker 98448/26908；5180 首页 200、API 健康 ok、stderr 为空，无额外 Worker。题目、文稿/当前修订和模板指纹前后相同，Build/TestRun 活动数仍为 0，见 before/after、sandbox-before/after、services-verified。无新实例、端口、数据库、依赖或迁移。未运行真实业务队列、浏览器操作、TeX、全量/E2E、生产构建或最大并发压力测试；未登录云主机、推送或部署公网，云端更新及该用户原题生成结果待用户验收。JUDGE/PACKAGES/部署指南/PLAN 已同步，差异检查后本地提交，不 push；本轮无阻塞。

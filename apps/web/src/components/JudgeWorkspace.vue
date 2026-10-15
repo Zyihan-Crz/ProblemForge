@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { NButton, NTabs, NTab, NSelect, NInput, NInputNumber, NFormItem, NCheckbox, NTag, NAlert, NModal, NEmpty, NSpin, useMessage, useDialog } from 'naive-ui';
-import { programRoles, programRoleLabels, verdicts, judgePurposeLabels, type JudgePurpose, type ProgramRole, defaultJudgeSettings, parseGeneratorCommands, formatGeneratorCommands, generatorPlanCommands } from '@problemforge/contracts';
+import { programRoles, programRoleLabels, verdicts, judgePurposeLabels, type JudgePurpose, type ProgramRole, defaultJudgeSettings, parseGeneratorCommands, formatGeneratorCommands, generatorPlanCommands, MAX_ARCHIVE_BYTES } from '@problemforge/contracts';
 import { useTaskEvents } from '../task-events';
 import { api, binaryFile, bytesBase64 } from '../api';
 import SourceEditor from './SourceEditor.vue';
@@ -205,7 +205,7 @@ async function saveForm() {
 }
 async function importZip(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return; busy.value = true;
-  try { if (file.size > 8_000_000) throw new Error('ZIP 最大 8MB'); const base64 = bytesBase64(new Uint8Array(await file.arrayBuffer())); await api(`/problems/${props.problemId}/tests/import-zip`, { method: 'POST', body: JSON.stringify({ base64, groupName: 'main' }) }); await catalog(); await refreshRuns(); message.success('ZIP 已按原始字节导入；重复输入保留并提示'); }
+  try { if (file.size > MAX_ARCHIVE_BYTES) throw new Error(`ZIP 最大 ${MAX_ARCHIVE_BYTES / 1_000_000} MB`); const base64 = bytesBase64(new Uint8Array(await file.arrayBuffer())); await api(`/problems/${props.problemId}/tests/import-zip`, { method: 'POST', body: JSON.stringify({ base64, groupName: 'main' }) }); await catalog(); await refreshRuns(); message.success('ZIP 已按原始字节导入；重复输入保留并提示'); }
   catch (e) { message.error((e as Error).message); } finally { busy.value = false; (event.target as HTMLInputElement).value = ''; }
 }
 </script>

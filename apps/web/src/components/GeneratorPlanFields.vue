@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NAlert, NCheckbox, NFormItem, NInput, NInputNumber, NSelect } from 'naive-ui';
-import { formatGeneratorCommands, generatorPlanCommands, parseGeneratorCommands } from '@problemforge/contracts';
+import { formatGeneratorCommands, generatorPlanCommands, parseGeneratorCommands, MAX_TEST_BYTES } from '@problemforge/contracts';
 
 const props = defineProps<{ modelValue: any; programs: any[]; plans: any[]; tests: any[] }>();
 const emit = defineEmits<{ 'update:modelValue': [value: any] }>();
@@ -49,6 +49,7 @@ function setMode(mode: string) {
   <NFormItem label="分组"><NInput :value="form.groupName" @update:value="value => set('groupName', value)"/></NFormItem>
   <NFormItem label="用途"><NCheckbox :checked="form.isSample" @update:checked="value => set('isSample', value)">题面样例</NCheckbox></NFormItem>
   <div class="generator-plan-wide generator-plan-preview">
+    <p class="generator-plan-help">每组生成输入最大 {{ MAX_TEST_BYTES / 1_000_000 }} MB。</p>
     <p class="generator-plan-help" v-if="form.mode === 'commands'">直接粘贴命令，首项是本题生成器的程序名称，末项是种子，中间是参数。每行一组，可使用不同生成器；空行忽略，含空格的参数可加引号。保存后再点击「执行生成计划」。</p>
     <NAlert v-if="parsed.error" :type="form.mode === 'commands' && !form.commandText.trim() ? 'info' : 'error'" :show-icon="false">{{ parsed.error }}</NAlert>
     <template v-else>

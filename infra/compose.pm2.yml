@@ -62,7 +62,7 @@ services:
     shm_size: 256mb
     networks: [backend, host-access]
     ports: ['127.0.0.1:${PF_JUDGE_PORT:?configure PF_JUDGE_PORT}:5050']
-    command: [-http-addr, ':5050', -mount-conf, /opt/judge-mount.yaml, -parallelism, '2', -pre-fork, '2', -container-cred-start, '21000', -tmp-fs-param, 'size=128m,nr_inodes=4096', -output-limit, 8m, -copy-out-limit, 8m, -file-timeout, 1h]
+    command: [-http-addr, ':5050', -mount-conf, /opt/judge-mount.yaml, -parallelism, '2', -pre-fork, '2', -container-cred-start, '21000', -tmp-fs-param, 'size=256m,nr_inodes=4096', -output-limit, 64m, -copy-out-limit, 64m, -file-timeout, 1h]
     restart: unless-stopped
     logging: *logging
 networks:

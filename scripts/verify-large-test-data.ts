@@ -12,8 +12,8 @@ import { makeTestZip } from '../fixtures/judge/zip.ts';
 // storage substitute. No listener, queue submission, author execution or files.
 if (!process.argv.includes('--rollback')) throw new Error('请显式指定 --rollback；所有夹具写入均回滚');
 const rollback = new Error('ROLLBACK_LARGE_DATA'), problemId = randomUUID(), userId = randomUUID();
-const app = await createApp(false), blobs = new Map<string, Buffer>(), savedPut = storage.put;
-storage.put = async (key, bytes) => { blobs.set(key, Buffer.from(bytes)); };
+const app = await createApp(false), blobs = new Map<string, { hash: string; bytes: number }>(), savedPut = storage.put;
+storage.put = async (key, bytes) => { blobs.set(key, { hash: sha256(bytes), bytes: bytes.length }); };
 try {
   await app.ready();
   await db.$transaction(async tx => {
@@ -30,7 +30,7 @@ try {
       await tx.user.create({ data: { id: userId, email: `${userId}@example.test`, name: 'Rollback large-data fixture', role: 'ADMIN', passwordHash: 'not-a-login-credential' } });
       await tx.problem.create({ data: { id: problemId, title: 'Rollback large-data fixture' } });
       const token = randomUUID(), csrf = randomUUID();
-      await tx.session.create({ data: { id: sha256(token), userId, csrfToken: csrf, expiresAt: new Date(Date.now() + 60000) } });
+      await tx.session.create({ data: { id: sha256(token), userId, csrfToken: csrf, expiresAt: new Date(Date.now() + 180000) } });
       const call = async (method: 'POST' | 'PUT', path: string, payload: object, expected = 200) => {
         const response = await app.inject({ method, url: `/api${path}`, headers: { origin: config.origin, cookie: `pf_session=${token}`, 'x-csrf-token': csrf }, payload });
         assert.equal(response.statusCode, expected, `${method} ${path}: ${response.body.slice(0, 500)}`); return response.json();
@@ -43,14 +43,14 @@ try {
       assert.equal(updated.currentRevision.inputBytes, MAX_TEST_BYTES);
       assert.equal(updated.currentRevision.answerBytes, MAX_TEST_BYTES);
       assert.equal(updated.currentRevision.inputHash, sha256(large));
-      assert([...blobs.values()].some(bytes => bytes.equals(large)));
+      assert([...blobs.values()].some(blob => blob.bytes === MAX_TEST_BYTES && blob.hash === sha256(large)));
       const oversized = Buffer.alloc(MAX_TEST_BYTES + 1).toString('base64');
       await call('POST', `/problems/${problemId}/tests`, { ...body, number: 9, inputBase64: oversized }, 422);
       assert.equal(await tx.testCase.count({ where: { problemId } }), 1);
       const self = { name: 'large checker fixture', kind: 'CHECKER', programId: null, enabled: true, expected: 'AC', inputBase64: base64, answerBase64: base64, outputBase64: base64 };
       const selfTest = await call('POST', `/problems/${problemId}/self-tests`, self);
       assert.equal((await call('PUT', `/self-tests/${selfTest.id}`, { ...self, expectedVersion: 1 })).version, 2);
-      const sample = large.subarray(0, 2_200_000);
+      const sample = large.subarray(0, 8_000_001);
       await call('POST', `/problems/${problemId}/tests/import-zip`, { base64: makeTestZip([{ name: '2.in', bytes: sample }]).toString('base64'), groupName: 'main' });
       assert.equal((await tx.testCase.findFirstOrThrow({ where: { problemId, number: 2 }, include: { currentRevision: true } })).currentRevision!.inputHash, sha256(sample));
       // Only metadata is simulated here: exercise collection of a large
@@ -63,13 +63,14 @@ try {
       assert.equal((await tx.testCase.findUniqueOrThrow({ where: { id: collected.testIds[0] }, include: { currentRevision: true } })).currentRevision!.inputBytes, MAX_TEST_BYTES);
       throw rollback;
     } finally { for (const item of saved.reverse()) item.object[item.method] = item.original; }
-  }, { timeout: 45000 }).catch(error => { if (error !== rollback) throw error; });
+  }, { timeout: 120000 }).catch(error => { if (error !== rollback) throw error; });
   assert.equal(await db.problem.count({ where: { id: problemId } }), 0);
   assert.equal(await db.user.count({ where: { id: userId } }), 0);
   assert.equal(await db.auditLog.count({ where: { actorId: userId } }), 0);
-  const result = { passed: true, rolledBack: true, maxBytes: MAX_TEST_BYTES, verified: ['8 MB input + answer create/update through API', '8 MB + 1 byte rejects without creating data', 'three 8 MB self-test files create/update', '2.2 MB ZIP input preserves hash', '8 MB generated input collection'], storage: 'in-memory only', queuedJobs: 0 };
-  await mkdir('.local/large-test-data', { recursive: true });
-  await writeFile('.local/large-test-data/api-result.json', JSON.stringify(result, null, 2));
+  const mb = MAX_TEST_BYTES / 1_000_000;
+  const result = { passed: true, rolledBack: true, maxBytes: MAX_TEST_BYTES, verified: [`${mb} MB input + answer create/update through API`, `${mb} MB + 1 byte rejects without creating data`, `three ${mb} MB self-test files create/update`, '8 MB + 1 byte ZIP input preserves hash', `${mb} MB generated input collection`], storage: 'hash/size records only; no files written', queuedJobs: 0 };
+  await mkdir('.local/generator-limit', { recursive: true });
+  await writeFile('.local/generator-limit/api-result.json', JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
 } finally { storage.put = savedPut; await app.close(); await db.$disconnect(); }
 process.exit(0);

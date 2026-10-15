@@ -83,6 +83,10 @@ test('Caddy changes preserve unrelated sites and repeat without duplicate blocks
   const first = mergeCaddyfile(original, settings), second = mergeCaddyfile(first, settings);
   assert.equal(first, second); assert.ok(first.startsWith(original));
   assert.equal(first.split(CADDY_BEGIN).length, 2);
+  // Upgrade the managed site's old cap without rewriting any other site.
+  const previous = first.replace('max_size 256MiB', 'max_size 40MiB');
+  assert.equal(mergeCaddyfile(previous, settings), first);
+  assert.match(first, /max_size 256MiB/);
   assert.throws(() => mergeCaddyfile('problems.cwnupaa.com { reverse_proxy localhost:1234 }', settings));
   assert.throws(() => mergeCaddyfile(CADDY_BEGIN, settings));
   assert.equal(hasCaddyHost({ apps: { http: { routes: [{ match: [{ host: ['problems.cwnupaa.com'] }] }] } } }, settings.domain), true);

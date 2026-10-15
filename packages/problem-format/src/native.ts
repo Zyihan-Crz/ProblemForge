@@ -1,7 +1,7 @@
 import {createHash}from'node:crypto';
 import {Type,type TSchema}from'@sinclair/typebox';
 import {Value}from'@sinclair/typebox/value';
-import {isJudgingData}from'@problemforge/contracts';
+import {isJudgingData,MAX_TEST_BYTES}from'@problemforge/contracts';
 import {programLanguages,ProgramInput,GeneratorPlanInput,ToolSelfTestInput,ProfileConfig,JudgeSettings,TestGroupsInput,StressConfigInput,DocumentInput,Language,defaultJudgeSettings,generatorPlanCommands,generatorPlanProgramIds,type ProblemManifest,type StoredBlob}from'@problemforge/contracts';
 import {PackageError,safePath}from'./archive.ts';import type{Exporter,Purpose,Issue,ImportResult}from'./types.ts';
 export const digest=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
@@ -10,7 +10,7 @@ const nullable=(s:TSchema)=>Type.Union([s,Type.Null()]);
 // TypeBox's runtime modulo check rejects e.g. 35 % 0.001 due to IEEE-754.
 // Preserve the schema's limits and verify milli-point precision explicitly below.
 function importSchema(value:any):any{if(Array.isArray(value))return value.map(importSchema);if(value&&typeof value==='object'){const copy={...value};for(const key of Object.keys(copy))copy[key]=importSchema(copy[key]);if(copy.multipleOf===0.001)delete copy.multipleOf;return copy;}return value;}
-const blob=Type.Object({key:Type.String({maxLength:200}),hash,bytes:Type.Integer({minimum:0,maximum:8_000_000})},strict);
+const blob=Type.Object({key:Type.String({maxLength:200}),hash,bytes:Type.Integer({minimum:0,maximum:MAX_TEST_BYTES})},strict);
 const test=Type.Object({id,revisionId:id,version,number:Type.Integer({minimum:1,maximum:100000}),groupName:Type.String({pattern:'^[A-Za-z0-9_-]{1,40}$'}),isSample:Type.Boolean(),enabled:Type.Boolean(),notes:Type.String({maxLength:1000}),input:blob,answer:nullable(blob),provenance:Type.Null()},strict);
 const manifestSchema=Type.Object({schemaVersion:Type.Literal(1),problemId:id,meta:Type.Object({title:Type.String({minLength:1,maxLength:160}),tags:Type.Array(Type.String({maxLength:40}),{maxItems:30}),notes:Type.String({maxLength:10000}),responsibleId:Type.Null()},strict),
  documents:Type.Array(Type.Object({id,revisionId:id,version,language:Language,kind:Type.Union(['STATEMENT','EDITORIAL_DOCUMENT','EDITORIAL_BEAMER'].map(v=>Type.Literal(v))),enabled:Type.Boolean(),body:DocumentInput.properties.body,metadata:DocumentInput.properties.metadata,sampleRevisionIds:Type.Array(id,{maxItems:10,uniqueItems:true}),template:nullable(Type.Object({id,templateId:id,number:version,hash,name:Type.String({maxLength:120})},strict))},strict),{maxItems:60}),

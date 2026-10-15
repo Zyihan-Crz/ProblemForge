@@ -117,7 +117,7 @@ export function ecosystem(settings, release, node) {
 }
 
 export function caddySite(settings) {
-  return `${CADDY_BEGIN}\n${settings.domain} {\n\trequest_body {\n\t\tmax_size 40MiB\n\t}\n\treverse_proxy 127.0.0.1:${settings.ports.api} {\n\t\theader_up X-Forwarded-For {remote_host}\n\t\theader_up X-Forwarded-Host {host}\n\t\theader_up X-Forwarded-Proto {scheme}\n\t\ttransport http {\n\t\t\tresponse_header_timeout 300s\n\t\t}\n\t}\n}\n${CADDY_END}\n`;
+  return `${CADDY_BEGIN}\n${settings.domain} {\n\trequest_body {\n\t\tmax_size 256MiB\n\t}\n\treverse_proxy 127.0.0.1:${settings.ports.api} {\n\t\theader_up X-Forwarded-For {remote_host}\n\t\theader_up X-Forwarded-Host {host}\n\t\theader_up X-Forwarded-Proto {scheme}\n\t\ttransport http {\n\t\t\tresponse_header_timeout 300s\n\t\t}\n\t}\n}\n${CADDY_END}\n`;
 }
 
 export function mergeCaddyfile(current, settings) {

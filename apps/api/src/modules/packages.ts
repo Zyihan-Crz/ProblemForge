@@ -1,12 +1,12 @@
 import{randomUUID}from'node:crypto';import{readFile}from'node:fs/promises';import{join}from'node:path';import{Type}from'@sinclair/typebox';
-import{ExportInput,ContestExportInput,TestDataExportInput,NovaJudgeExportInput,isCppLanguage,isJudgingData,type ProblemManifest}from'@problemforge/contracts';import{db,Prisma}from'@problemforge/database';
+import{ExportInput,ContestExportInput,TestDataExportInput,NovaJudgeExportInput,isCppLanguage,isJudgingData,MAX_ARCHIVE_BASE64_LENGTH,type ProblemManifest}from'@problemforge/contracts';import{db,Prisma}from'@problemforge/database';
 import{problemAccess,contestAccess,hashObject,sha256,HttpError,audit,root}from'@problemforge/domain';
 import{PackageError,readArchive,writeArchive,safeExportPath,nativeExporter,polygonExporter,exportTestData,exportHydroProblem,exportNovaJudgeProblem,importNative,importPolygon,blobs,validateManifest,type Issue,type ImportResult}from'@problemforge/problem-format';
 import{validateBody}from'@problemforge/template-engine';import{groupOrder,TESTLIB_HASH}from'@problemforge/judge-core';
 import{authenticate,storage,type Api}from'../app.ts';import{revisionAccess}from'./revisions.ts';import{contestRevision,type FrozenContest}from'./contests.ts';import{restoreManifest}from'./restore-manifest.ts';import{problemSnapshot,readProblemSnapshot}from'./revision-snapshot.ts';
 import { currentContestRevision } from './contest-snapshot.ts';
 const Id=Type.Object({id:Type.String()}),strict={additionalProperties:false};
-const ImportInput=Type.Object({format:Type.Union([Type.Literal('NATIVE'),Type.Literal('POLYGON')]),base64:Type.String({minLength:1,maxLength:32_000_000,pattern:'^[A-Za-z0-9+/]+={0,2}$'}),profileMap:Type.Record(Type.String({maxLength:80}),Type.String({maxLength:80}),{maxProperties:50})},strict);
+const ImportInput=Type.Object({format:Type.Union([Type.Literal('NATIVE'),Type.Literal('POLYGON')]),base64:Type.String({minLength:1,maxLength:MAX_ARCHIVE_BASE64_LENGTH,pattern:'^[A-Za-z0-9+/]+={0,2}$'}),profileMap:Type.Record(Type.String({maxLength:80}),Type.String({maxLength:80}),{maxProperties:50})},strict);
 const ConfirmInput=Type.Object({reportHash:Type.String({pattern:'^[a-f0-9]{64}$'}),title:Type.String({minLength:1,maxLength:160}),acceptWarnings:Type.Literal(true)},strict);
 type ImportReport={issues:Issue[];manifest:ProblemManifest;reportHash:string;committedProblemId?:string};
 function receiptView(record:{id:string;format:string;createdAt:Date;report:unknown}){const r=record.report as ImportReport;return{id:record.id,format:record.format,createdAt:record.createdAt,reportHash:r.reportHash,issues:r.issues,title:r.manifest.meta.title,committedProblemId:r.committedProblemId??null,counts:{documents:r.manifest.documents.length,programs:r.manifest.programs.length,tests:r.manifest.tests.length},canImport:!r.issues.some(i=>i.status==='BLOCKED')};}
@@ -86,7 +86,7 @@ export async function packageRoutes(app:Api){
   });
  }
  app.get('/api/exports/:id/file',{preHandler:authenticate,schema:{params:Id}},async(req,reply)=>{const e=await db.exportArtifact.findUnique({where:{id:req.params.id}});if(!e)throw new HttpError(404,'题包不存在');if(e.contestId)await contestAccess(req.user,e.contestId);else if(e.problemId)await problemAccess(req.user,e.problemId);else if(e.requestedById!==req.user.id)throw new HttpError(404,'导入隔离包不存在');const name=encodeURIComponent(exportFileName(e)).replace(/['()*]/g,c=>`%${c.charCodeAt(0).toString(16).toUpperCase()}`);return reply.type('application/zip').header('Content-Disposition',`attachment; filename="${e.format}-${e.purpose}.zip"; filename*=UTF-8''${name}`).send(await storage.get(e.key));});
- app.post('/api/imports/inspect',{preHandler:authenticate,bodyLimit:32_100_000,schema:{body:ImportInput}},async req=>{
+ app.post('/api/imports/inspect',{preHandler:authenticate,bodyLimit:MAX_ARCHIVE_BASE64_LENGTH+100_000,schema:{body:ImportInput}},async req=>{
   const bytes=Buffer.from(req.body.base64,'base64');if(bytes.toString('base64')!==req.body.base64)throw new HttpError(422,'需要规范 Base64');const files=await readArchive(bytes);const result=await prepareImport(req.body.format,files,req.body.profileMap);
   const reportHash=hashObject(result);const report:ImportReport={issues:result.report,manifest:result.manifest,reportHash};const key=`imports/${randomUUID()}`;await storage.put(key,bytes);
   const record=await db.exportArtifact.create({data:{revisionId:'IMPORT',requestedById:req.user.id,purpose:'QUARANTINE',format:`IMPORT_${req.body.format}`,key,hash:sha256(bytes),bytes:bytes.length,report:report as unknown as Prisma.InputJsonValue}});await audit(req.user.id,'INSPECT_IMPORT',record.id);

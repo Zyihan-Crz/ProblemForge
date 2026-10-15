@@ -11,7 +11,7 @@ mount:
   - {type: bind, source: /dev/random, target: /dev/random}
   - {type: bind, source: /dev/zero, target: /dev/zero}
   - {type: bind, source: /dev/full, target: /dev/full}
-  - {type: tmpfs, target: /w, data: 'size=128m,nr_inodes=4096'}
+  - {type: tmpfs, target: /w, data: 'size=256m,nr_inodes=4096'}
   - {type: tmpfs, target: /tmp, data: 'size=64m,nr_inodes=2048'}
 proc: true
 symLink:

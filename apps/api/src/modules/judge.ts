@@ -1,7 +1,7 @@
 import { Type } from '@sinclair/typebox';
 import { randomUUID } from 'node:crypto';
 import {
-  JudgeSettingsInput, defaultJudgeSettings, ProfileInput, ProfileUpdateInput, ProgramInput, ProgramUpdateInput, isCppLanguage, MAX_TEST_BASE64_LENGTH,
+  JudgeSettingsInput, defaultJudgeSettings, ProfileInput, ProfileUpdateInput, ProgramInput, ProgramUpdateInput, isCppLanguage, MAX_TEST_BASE64_LENGTH, MAX_ARCHIVE_BYTES, MAX_ARCHIVE_BASE64_LENGTH,
   TestCaseInput, TestCaseUpdateInput, TestCasesDeleteInput, TestZipInput, GeneratorPlanInput, GeneratorPlanUpdateInput, ToolSelfTestInput, ToolSelfTestUpdateInput, generatorPlanCommands, generatorPlanProgramIds,
   type ProgramSave, type GeneratorPlanSave, type ToolSelfTestSave, type JudgeSettingsValue, type TestGroupsValue,
 } from '@problemforge/contracts';
@@ -172,14 +172,15 @@ export async function judgeRoutes(app: Api) {
     const number = (revision.configuration as { number: number }).number;
     return reply.type('application/octet-stream').header('Content-Disposition', `attachment; filename="${number}.${req.params.file === 'input' ? 'in' : 'ans'}"`).send(await storage.get(key));
   });
-  app.post('/api/problems/:id/tests/import-zip', { preHandler: authenticate, bodyLimit: 12_000_000, schema: { params: Id, body: TestZipInput } }, async req => {
+  app.post('/api/problems/:id/tests/import-zip', { preHandler: authenticate, bodyLimit: MAX_ARCHIVE_BASE64_LENGTH + 16_384, schema: { params: Id, body: TestZipInput } }, async req => {
     await problemAccess(req.user, req.params.id, true);
+    const archive = rawBytes(req.body.base64, MAX_ARCHIVE_BYTES), archiveHash = sha256(archive);
     let imported;
-    try { imported = await readTestArchive(rawBytes(req.body.base64, 8_000_000)); } catch (e) { if (e instanceof ArchiveError) throw new HttpError(422, e.message, 'ARCHIVE_REJECTED'); throw e; }
+    try { imported = await readTestArchive(archive); } catch (e) { if (e instanceof ArchiveError) throw new HttpError(422, e.message, 'ARCHIVE_REJECTED'); throw e; }
     const blobs = await Promise.all(imported.map(async t => ({ ...t, input: await saveBlob(req.params.id, t.input), answer: t.answer ? await saveBlob(req.params.id, t.answer) : null })));
     const ids = await db.$transaction(async tx => {
       await lockProblem(tx, req.params.id); const result: string[] = [];
-      for (const test of blobs) result.push(await appendTest(tx, req.params.id, { number: test.number, groupName: req.body.groupName, isSample: false, enabled: true, notes: '' }, test.input, test.answer, { type: 'ZIP', archiveHash: sha256(rawBytes(req.body.base64, 8_000_000)) }));
+      for (const test of blobs) result.push(await appendTest(tx, req.params.id, { number: test.number, groupName: req.body.groupName, isSample: false, enabled: true, notes: '' }, test.input, test.answer, { type: 'ZIP', archiveHash }));
       return result;
     });
     await audit(req.user.id, 'IMPORT_TEST_ZIP', req.params.id, { count: ids.length }); return Promise.all(ids.map(testView));

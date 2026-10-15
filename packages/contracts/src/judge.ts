@@ -63,9 +63,12 @@ export const ProgramInput = Type.Object(programProperties, strict);
 export const ProgramUpdateInput = Type.Object({ ...programProperties, expectedVersion: Type.Integer({ minimum: 1 }) }, strict);
 export type ProgramSave = Static<typeof ProgramInput>;
 // One shared bound for generated inputs, saved test files and tool self-tests.
-// Keep within the native problem package's 8 MB per-file allowance.
-export const MAX_TEST_BYTES = 8_000_000;
+export const MAX_TEST_BYTES = 64_000_000;
 export const MAX_TEST_BASE64_LENGTH = Math.ceil(MAX_TEST_BYTES / 3) * 4;
+// Support large inputs/answers while bounding buffered archives.
+export const MAX_ARCHIVE_BYTES = 128_000_000;
+export const MAX_ARCHIVE_EXPANDED_BYTES = 256_000_000;
+export const MAX_ARCHIVE_BASE64_LENGTH = Math.ceil(MAX_ARCHIVE_BYTES / 3) * 4;
 export const RawBase64 = Type.String({ maxLength: MAX_TEST_BASE64_LENGTH, pattern: '^[A-Za-z0-9+/]*={0,2}$' });
 const testProperties = {
   number: Type.Integer({ minimum: 1, maximum: 100000 }), groupName: Type.String({ pattern: '^[A-Za-z0-9_-]{1,40}$' }),
@@ -88,7 +91,7 @@ export const TestGroupsInput = Type.Object({ groups: Type.Array(Type.Object({
 export const TestGroupsUpdateInput = Type.Object({ expectedVersion: Type.Integer({ minimum: 0 }), data: TestGroupsInput }, strict);
 export type TestGroupsValue = Static<typeof TestGroupsInput>;
 export type ScoreExpectation = NonNullable<ProgramSave['expectedScore']>;
-export const TestZipInput = Type.Object({ base64: Type.String({ minLength: 1, maxLength: 11_200_000, pattern: '^[A-Za-z0-9+/]+={0,2}$' }), groupName: testProperties.groupName }, strict);
+export const TestZipInput = Type.Object({ base64: Type.String({ minLength: 1, maxLength: MAX_ARCHIVE_BASE64_LENGTH, pattern: '^[A-Za-z0-9+/]+={0,2}$' }), groupName: testProperties.groupName }, strict);
 const generatorArgv = Type.Array(Type.String({ maxLength: 512, pattern: '^[^\u0000\r\n]*$' }), { maxItems: 32 });
 const generatorSeed = Type.String({ pattern: '^-?[0-9]{1,18}$' });
 export const GeneratorCommandInput = Type.Object({ argv: generatorArgv, seed: generatorSeed, programId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })) }, strict);

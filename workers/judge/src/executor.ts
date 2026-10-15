@@ -65,7 +65,9 @@ export class Executor {
     if (executionVerdict(result) === 'INFRA_ERROR') verdict = 'INFRA_ERROR';
     if (outputFile !== 'stdout' && output === null && verdict === 'AC') verdict = 'RE';
     if (this.signal.aborted) verdict = 'CANCELED';
-    const diagnostic = [stderr.toString('utf8'), result.error, (result.fileError?.length ? JSON.stringify(result.fileError) : ''), outputFile !== 'stdout' && output === null ? `缺少输出文件 ${outputFile}` : ''].filter(Boolean).join('\n').slice(0, 16384);
+    const generatorLimit = (phase === 'GENERATOR' || phase === 'GENERATOR_REPEAT') && verdict === 'OLE'
+      ? `生成器输出超限：每组输入（stdout）最多 ${MAX_TEST_BYTES / 1_000_000} MB，诊断信息（stderr）最多 64 KiB。请根据下方文件名检查对应输出。` : '';
+    const diagnostic = [generatorLimit, stderr.toString('utf8'), result.error, (result.fileError?.length ? JSON.stringify(result.fileError) : ''), outputFile !== 'stdout' && output === null ? `缺少输出文件 ${outputFile}` : ''].filter(Boolean).join('\n').slice(0, 16384);
     const invocation = await db.invocation.create({ data: {
       runId: this.runId, programId: program.id, programRevisionId: program.revisionId, ...context, phase, verdict, status: result.status, exitStatus: result.exitStatus ?? -1,
       timeMs: (result.time ?? 0) / 1e6, wallTimeMs: (result.runTime ?? 0) / 1e6, memoryBytes: result.memory ?? 0,
